@@ -1,0 +1,35 @@
+{
+  "$schema": "gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window: dialog, filesystem and opener access.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    {
+      "identifier": "fs:default",
+      "allow": [
+        { "path": "$HOME/*" },
+        { "path": "$HOME/**" },
+        { "path": "$DESKTOP/*" },
+        { "path": "$DOCUMENT/*" },
+        { "path": "$DOWNLOAD/*" },
+        { "path": "$PICTURE/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$HOME/*" },
+        { "path": "$HOME/**" },
+        { "path": "$DESKTOP/*" },
+        { "path": "$DOCUMENT/*" },
+        { "path": "$DOWNLOAD/*" }
+      ]
+    },
+    "fs:allow-read-text-file",
+    "fs:allow-exists",
+    "fs:allow-mkdir",
+    "opener:default"
+  ]
+}

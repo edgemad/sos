@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #app {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    @apply bg-white text-gray-900 dark:bg-[#1f1f1f] dark:text-gray-100 font-sans antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 h-8 text-sm font-medium
+      transition-colors select-none cursor-pointer whitespace-nowrap;
+  }
+  .btn-primary {
+    @apply bg-docs text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+  .card {
+    @apply bg-white dark:bg-[#2d2d2d] rounded-xl border border-gray-200 dark:border-gray-700 shadow-card;
+  }
+  .input {
+    @apply h-8 rounded-md border border-gray-300 dark:border-gray-600 bg-transparent
+      px-2.5 text-sm outline-none focus:border-docs focus:ring-1 focus:ring-docs;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .menu {
+    @apply absolute z-40 min-w-[180px] rounded-lg border border-gray-200 dark:border-gray-600
+      bg-white dark:bg-[#2d2d2d] shadow-modal py-1.5;
+  }
+  .menu-item {
+    @apply flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left cursor-pointer
+      hover:bg-gray-100 dark:hover:bg-gray-700 whitespace-nowrap;
+  }
+  .menu-sep {
+    @apply my-1.5 border-t border-gray-200 dark:border-gray-600;
+  }
+}
+
+/* Slim, Google-Workspace-like scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,.28) transparent;
+}
+.dark * {
+  scrollbar-color: rgba(255,255,255,.25) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.24);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgba(0,0,0,.4); }
+.dark ::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,.22); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Writer canvas content styles (inside contenteditable) */
+.writer-page h1 { @apply text-3xl font-bold mt-6 mb-3; }
+.writer-page h2 { @apply text-2xl font-semibold mt-5 mb-2; }
+.writer-page h3 { @apply text-xl font-semibold mt-4 mb-2; }
+.writer-page p  { @apply my-2 leading-7; }
+.writer-page ul { @apply list-disc pl-8 my-2; }
+.writer-page ol { @apply list-decimal pl-8 my-2; }
+.writer-page li { @apply my-0.5; }
+.writer-page blockquote {
+  @apply border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-3 text-gray-600 dark:text-gray-300 italic;
+}
+.writer-page hr { @apply my-4 border-gray-300 dark:border-gray-600; }
+.writer-page table { @apply border-collapse my-3 w-full; }
+.writer-page th, .writer-page td {
+  @apply border border-gray-400 dark:border-gray-500 px-2 py-1 text-left;
+}
+.writer-page a { @apply text-docs underline; }
+.writer-page code {
+  @apply bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5 font-mono text-[0.9em];
+}
+
+/* Slides canvas element primitives */
+.slide-block { @apply absolute overflow-hidden cursor-move; }
+.slide-block:focus-within { @apply ring-2 ring-blue-500 z-10; }
+
+/* Print: only the writer pages survive */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0; }
+}

@@ -1,0 +1,42 @@
+# ── Node / frontend ────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+.vite/
+
+# ── Rust / Tauri ───────────────────────────────────────────────
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/Cargo.lock.orig
+
+# ── Svelte / tooling caches ────────────────────────────────────
+.svelte-kit/
+.turbo/
+.eslintcache
+
+# ── Env & secrets ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Freebuff agent metadata ───────────────────────────────────
+.freebuff/
+
+# ── OS artifacts (macOS / Windows / Linux) ─────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*.swp
+*~
+
+# ── Bundled app artifacts ──────────────────────────────────────
+*.dmg
+*.app
+*.AppImage
+*.deb
+*.rpm
+*.msi
+*.exe
