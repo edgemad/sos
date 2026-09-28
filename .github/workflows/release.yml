@@ -5,6 +5,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Needed to create the GitHub Release and upload installers.
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -58,9 +62,9 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK
+      - name: Accept Android SDK licenses
         if: matrix.android
-        uses: android-actions/setup-android@v3
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Install Android Rust targets
         if: matrix.android
