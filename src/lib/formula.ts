@@ -35,19 +35,38 @@ function tokenize(src: string): Token[] {
       tokens.push({ type: "str", value: s });
       continue;
     }
-    if (/[A-Za-z_]/.test(c)) {
+    if (/[A-Za-z_$]/.test(c)) {
       let id = "";
-      while (i < src.length && /[A-Za-z0-9_]/.test(src[i])) id += src[i++];
-      // range like A1:B3
-      if (src[i] === ":" && /[A-Za-z]/.test(src[i + 1] ?? "")) {
+      while (i < src.length && /[A-Za-z0-9_$]/.test(src[i])) id += src[i++];
+      const cleanId = id.replace(/\$/g, "").toUpperCase();
+      // range like A1:B3 — tolerate whitespace and $ anchors around the colon
+      let j = i;
+      while (j < src.length && /\s/.test(src[j])) j++;
+      if (src[j] === ":" && /[A-Za-z$]/.test(src[j + 1] ?? "")) {
+        j++; // colon
+        while (j < src.length && /\s/.test(src[j])) j++;
         let ref2 = "";
-        i++; // colon
-        while (i < src.length && /[A-Za-z0-9_]/.test(src[i])) ref2 += src[i++];
-        tokens.push({ type: "range", value: `${id}:${ref2}` });
-      } else if (src[i] === "(") {
-        tokens.push({ type: "func", value: id.toUpperCase() });
+        while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) ref2 += src[j++];
+        i = j;
+        tokens.push({ type: "range", value: `${cleanId}:${ref2.replace(/\$/g, "").toUpperCase()}` });
+      } else if (/^[A-Z]+[0-9]+$/.test(cleanId) && src[j] === ":") {
+        // "A1 : A3" — the second half was tokenized separately; skip ahead and
+        // consume the other ref so this becomes one range token.
+        j++; // colon
+        while (j < src.length && /\s/.test(src[j])) j++;
+        let ref2 = "";
+        while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) ref2 += src[j++];
+        if (ref2) {
+          i = j;
+          tokens.push({ type: "range", value: `${cleanId}:${ref2.replace(/\$/g, "").toUpperCase()}` });
+        } else {
+          tokens.push({ type: "ref", value: cleanId });
+        }
+      } else if (src[j] === "(") {
+        i = j;
+        tokens.push({ type: "func", value: cleanId });
       } else {
-        tokens.push({ type: "ref", value: id.toUpperCase() });
+        tokens.push({ type: "ref", value: cleanId });
       }
       continue;
     }
@@ -98,7 +117,7 @@ export function cellKey(row: number, col: number): string {
 
 /** Parse a reference like "B7" into 0-based {row, col}. */
 function parseRef(ref: string): { row: number; col: number } | null {
-  const m = /^([A-Z]+)([0-9]+)$/.exec(ref);
+  const m = /^([A-Z]+)([0-9]+)$/.exec(ref.replace(/\$/g, "").toUpperCase());
   if (!m) return null;
   return { col: nameToCol(m[1]), row: parseInt(m[2], 10) - 1 };
 }
@@ -170,7 +189,7 @@ function evalFormula(src: string, ctx: EvalCtx): CellValue {
   const peek = () => tokens[pos];
   const eat = () => tokens[pos++];
 
-  // Precedence climbing: compare < add < mul < power < unary < primary
+  // Precedence climbing: compare < concat < add < mul < power < unary < primary
   function parseCompare(): CellValue {
     let left = parseAdd();
     while (peek()?.type === "op" && ["=", "<>", "<", ">", "<=", ">="].includes(peek().value)) {
@@ -183,10 +202,10 @@ function evalFormula(src: string, ctx: EvalCtx): CellValue {
 
   function parseAdd(): CellValue {
     let left = parseMul();
-    while (peek()?.type === "op" && ["+", "-"].includes(peek().value)) {
+    while (peek()?.type === "op" && ["+", "-", "&"].includes(peek().value)) {
       const op = eat().value;
       const right = parseMul();
-      left = arith(left, op, right);
+      left = op === "&" ? textValue(left) + textValue(right) : arith(left, op, right);
     }
     return left;
   }
@@ -202,13 +221,19 @@ function evalFormula(src: string, ctx: EvalCtx): CellValue {
   }
 
   function parsePow(): CellValue {
-    const base = parseUnary();
+    let base = parseUnary();
     if (peek()?.type === "op" && peek().value === "^") {
       eat();
       const exp = parsePow();
       const b = num(base), e = num(exp);
       if (b === null || e === null) return ERROR;
-      return Math.pow(b, e);
+      base = Math.pow(b, e);
+    }
+    // Postfix percent: 50% -> 0.5, A1% -> A1/100
+    while (peek()?.type === "op" && peek().value === "%") {
+      eat();
+      const n = num(base);
+      base = n === null ? ERROR : n / 100;
     }
     return base;
   }
@@ -241,6 +266,9 @@ function evalFormula(src: string, ctx: EvalCtx): CellValue {
     }
     if (t.type === "ref") {
       eat();
+      if (t.value === "TRUE") return true;
+      if (t.value === "FALSE") return false;
+      if (!/^[A-Z]+[0-9]+$/.test(t.value)) return "#NAME?";
       return evalKey(t.value, ctx);
     }
     if (t.type === "range") {
@@ -342,6 +370,21 @@ function num(v: CellValue): number | null {
   return null;
 }
 
+/** Render any value as text for concatenation / text functions. */
+function textValue(v: CellValue): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  return displayValue(v);
+}
+
+/** First scalar behind an argument (ranges collapse to their first value). */
+function scalar(args: CellValue[], i: number): CellValue {
+  const v = args[i];
+  const r = v as unknown as { __range?: boolean; vals?: CellValue[] };
+  if (r && r.__range && Array.isArray(r.vals)) return r.vals[0] ?? null;
+  return v ?? null;
+}
+
 function arith(a: CellValue, op: string, b: CellValue): CellValue {
   if (op === "+") {
     const x = num(a), y = num(b);
@@ -430,34 +473,40 @@ function callFn(name: string, args: CellValue[], ctx: EvalCtx): CellValue {
       });
       return acc;
     }
-    case "AND":
-      return args.every((a) => (typeof a === "boolean" ? a : (num(a) ?? 0) !== 0));
-    case "OR":
-      return args.some((a) => (typeof a === "boolean" ? a : (num(a) ?? 0) !== 0));
+    case "AND": {
+      const vals = all.filter((v) => v !== null && v !== "");
+      if (!vals.length) return false;
+      return vals.every((v) => (typeof v === "boolean" ? v : (num(v) ?? 0) !== 0));
+    }
+    case "OR": {
+      const vals = all.filter((v) => v !== null && v !== "");
+      if (!vals.length) return false;
+      return vals.some((v) => (typeof v === "boolean" ? v : (num(v) ?? 0) !== 0));
+    }
     case "NOT":
-      return !((num(args[0]) ?? 0) !== 0);
+      return !((num(scalar(args, 0)) ?? 0) !== 0);
     case "LEN":
-      return String(args[0] ?? "").length;
+      return textValue(scalar(args, 0)).length;
     case "UPPER":
-      return String(args[0] ?? "").toUpperCase();
+      return textValue(scalar(args, 0)).toUpperCase();
     case "LOWER":
-      return String(args[0] ?? "").toLowerCase();
+      return textValue(scalar(args, 0)).toLowerCase();
     case "TRIM":
-      return String(args[0] ?? "").trim();
+      return textValue(scalar(args, 0)).trim();
     case "LEFT": {
-      const s = String(args[0] ?? "");
-      const n = num(args[1]) ?? 1;
+      const s = textValue(scalar(args, 0));
+      const n = num(scalar(args, 1)) ?? 1;
       return s.slice(0, Math.max(0, n));
     }
     case "RIGHT": {
-      const s = String(args[0] ?? "");
-      const n = num(args[1]) ?? 1;
+      const s = textValue(scalar(args, 0));
+      const n = num(scalar(args, 1)) ?? 1;
       return n <= 0 ? "" : s.slice(-n);
     }
     case "MID": {
-      const s = String(args[0] ?? "");
-      const start = (num(args[1]) ?? 1) - 1;
-      const len = num(args[2]) ?? 0;
+      const s = textValue(scalar(args, 0));
+      const start = (num(scalar(args, 1)) ?? 1) - 1;
+      const len = num(scalar(args, 2)) ?? 0;
       return s.slice(start, start + len);
     }
     case "ROUND": {
@@ -476,15 +525,16 @@ function callFn(name: string, args: CellValue[], ctx: EvalCtx): CellValue {
       return Math.sqrt(v);
     }
     case "IF": {
-      const cond = args[0];
+      const cond = scalar(args, 0);
       const truthy = typeof cond === "boolean" ? cond : (num(cond) ?? 0) !== 0;
-      return truthy ? args[1] ?? true : args[2] ?? false;
+      return truthy ? scalar(args, 1) ?? true : scalar(args, 2) ?? false;
     }
     case "IFERROR":
       return args[0] === ERROR || args[0] === "#DIV/0!" ? args[1] ?? "" : args[0];
-    case "CONCAT": {
+    case "CONCAT":
+    case "CONCATENATE": {
       void ctx;
-      return args.map((a) => (typeof a === "boolean" ? String(a) : String(a ?? ""))).join("");
+      return all.map((v) => textValue(v)).join("");
     }
     case "NOW":
       return new Date().toLocaleString();

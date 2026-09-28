@@ -35,7 +35,8 @@ export const FORMULA_FNS: FormulaFnInfo[] = [
   { name: "LEFT", signature: "LEFT(text, [count])", description: "First characters of text.", category: "Text" },
   { name: "RIGHT", signature: "RIGHT(text, [count])", description: "Last characters of text.", category: "Text" },
   { name: "MID", signature: "MID(text, start, length)", description: "Characters from the middle of text.", category: "Text" },
-  { name: "NOW", signature: "NOW()", description: "Current date and time.", category: "Date" }
+  { name: "NOW", signature: "NOW()", description: "Current date and time.", category: "Date" },
+  { name: "CONCATENATE", signature: "CONCATENATE(text1, [text2, …])", description: "Joins text values together.", category: "Text" }
 ];
 
 /** Fuzzy-ish suggestion list for the current partial function name. */

@@ -416,6 +416,16 @@
 
   function onGridKeydown(e: KeyboardEvent): void {
     if (!tab || editing) return;
+    const mod = isMod(e);
+    if (mod) {
+      const k = e.key.toLowerCase();
+      if (k === "c") { e.preventDefault(); void copySelection(false); return; }
+      if (k === "x") { e.preventDefault(); void copySelection(true); return; }
+      if (k === "v") { e.preventDefault(); void pasteFromClipboard(); return; }
+      if (k === "d") { e.preventDefault(); fillDown(); return; }
+      if (k === "r") { e.preventDefault(); fillRight(); return; }
+      return; // other mod combos (undo/redo/find…) are app-level
+    }
     switch (e.key) {
       case "ArrowUp": e.preventDefault(); move(-1, 0); break;
       case "ArrowDown": e.preventDefault(); move(1, 0); break;
@@ -424,7 +434,7 @@
       case "Enter": e.preventDefault(); startEdit(); break;
       case "Tab": e.preventDefault(); move(0, e.shiftKey ? -1 : 1); break;
       case "Delete":
-      case "Backspace": { e.preventDefault(); editValue = ""; commit(); break; }
+      case "Backspace": e.preventDefault(); clearSelection(); break;
       case "F2": e.preventDefault(); startEdit(); break;
       default:
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); startEdit(e.key); }
@@ -860,9 +870,12 @@
       case "undo": if (!sheetsUndo()) document.execCommand("undo"); break;
       case "redo": if (!sheetsRedo()) document.execCommand("redo"); break;
       case "edit:find": dialog = "find"; break;
+      case "edit:cut": void copySelection(true); break;
+      case "edit:copy": void copySelection(false); break;
+      case "edit:paste": void pasteFromClipboard(); break;
       case "edit:fill-down": fillDown(); break;
       case "edit:fill-right": fillRight(); break;
-      case "edit:clear": editValue = ""; commit(); break;
+      case "edit:clear": clearSelection(); break;
       case "view:freeze-row": freeze("row"); break;
       case "view:freeze-col": freeze("col"); break;
       case "view:unfreeze": freeze("none"); break;
@@ -1156,6 +1169,74 @@
   function onRedoRequest(): void {
     if (!sheetsRedo()) document.execCommand("redo");
   }
+  function onFindRequest(): void {
+    dialog = "find";
+  }
+  function onFillDownRequest(): void { fillDown(); }
+  function onFillRightRequest(): void { fillRight(); }
+
+  /** Selected block (or single cell) as TSV for clipboard interchange. */
+  function selectionTsv(): string {
+    if (!tab) return "";
+    const r = selRange ?? { r0: selRow, r1: selRow, c0: selCol, c1: selCol };
+    const lines: string[] = [];
+    for (let row = r.r0; row <= r.r1; row++) {
+      const cols: string[] = [];
+      for (let c = r.c0; c <= r.c1; c++) cols.push(display[cellKey(row, c)] ?? tab.cells[cellKey(row, c)] ?? "");
+      lines.push(cols.join("\t"));
+    }
+    return lines.join("\n");
+  }
+
+  async function copySelection(cut: boolean): Promise<void> {
+    const tsv = selectionTsv();
+    try {
+      await navigator.clipboard.writeText(tsv);
+    } catch {
+      // Clipboard API unavailable (insecure context) — fall back silently.
+    }
+    if (cut && file && data && tab) {
+      const r = selRange ?? { r0: selRow, r1: selRow, c0: selCol, c1: selCol };
+      const cells = { ...tab.cells };
+      for (let row = r.r0; row <= r.r1; row++) for (let c = r.c0; c <= r.c1; c++) delete cells[cellKey(row, c)];
+      const sheets = [...data.sheets];
+      sheets[data.activeSheet] = { ...tab, cells };
+      commitSheets(file.id, { ...data, sheets });
+    }
+  }
+
+  async function pasteFromClipboard(): Promise<void> {
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      return;
+    }
+    if (!text || !file || !data || !tab) return;
+    const rows = text.replace(/\r/g, "").split("\n").map((line) => line.split("\t"));
+    const cells = { ...tab.cells };
+    rows.forEach((rowVals, dr) => {
+      rowVals.forEach((v, dc) => {
+        if (v === "") return;
+        const key = cellKey(selRow + dr, selCol + dc);
+        if (selRow + dr < tab!.rows && selCol + dc < tab!.cols) cells[key] = v;
+      });
+    });
+    const sheets = [...data.sheets];
+    sheets[data.activeSheet] = { ...tab, cells };
+    commitSheets(file.id, { ...data, sheets });
+  }
+
+  function clearSelection(): void {
+    if (!file || !data || !tab) return;
+    const r = selRange ?? { r0: selRow, r1: selRow, c0: selCol, c1: selCol };
+    const cells = { ...tab.cells };
+    for (let row = r.r0; row <= r.r1; row++) for (let c = r.c0; c <= r.c1; c++) delete cells[cellKey(row, c)];
+    const sheets = [...data.sheets];
+    sheets[data.activeSheet] = { ...tab, cells };
+    commitSheets(file.id, { ...data, sheets });
+  }
+
   // Re-register whenever the component's reactive scope re-runs; idempotent because
   // addEventListener deduplicates identical function references.
   $: bridgeRef = registerBridge();
@@ -1166,12 +1247,21 @@
     window.addEventListener("sos:undo-request", onUndoRequest);
     window.removeEventListener("sos:redo-request", onRedoRequest);
     window.addEventListener("sos:redo-request", onRedoRequest);
+    window.removeEventListener("sos:find-request", onFindRequest);
+    window.addEventListener("sos:find-request", onFindRequest);
+    window.removeEventListener("sos:fill-down-request", onFillDownRequest);
+    window.addEventListener("sos:fill-down-request", onFillDownRequest);
+    window.removeEventListener("sos:fill-right-request", onFillRightRequest);
+    window.addEventListener("sos:fill-right-request", onFillRightRequest);
     return 1;
   }
   onDestroy(() => {
     window.removeEventListener("sos-cmd-sheets", onWindowCmd);
     window.removeEventListener("sos:undo-request", onUndoRequest);
     window.removeEventListener("sos:redo-request", onRedoRequest);
+    window.removeEventListener("sos:find-request", onFindRequest);
+    window.removeEventListener("sos:fill-down-request", onFillDownRequest);
+    window.removeEventListener("sos:fill-right-request", onFillRightRequest);
   });
 </script>
 
