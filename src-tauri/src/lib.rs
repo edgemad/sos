@@ -7,8 +7,12 @@
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
+// Native menus are desktop-only; Android/iOS builds skip this module.
+#[cfg(desktop)]
 use tauri::menu::{AboutMetadata, CheckMenuItem, MenuBuilder, MenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager, Runtime};
+#[cfg(desktop)]
+use tauri::{Emitter, Runtime};
+use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
 /// Result payload for file open operations.
@@ -150,6 +154,7 @@ fn system_info(app: tauri::AppHandle) -> SystemInfo {
 }
 
 /// Build the native application menu and wire menu events to the webview.
+#[cfg(desktop)]
 fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     let is_mac = cfg!(target_os = "macos");
 
@@ -268,6 +273,7 @@ pub fn run() {
             system_info
         ])
         .setup(|app| {
+            #[cfg(desktop)]
             build_menu(&app.handle())?;
             Ok(())
         })

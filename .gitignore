@@ -9,6 +9,7 @@ coverage/
 # ── Rust / Tauri ───────────────────────────────────────────────
 src-tauri/target/
 src-tauri/gen/schemas/
+src-tauri/gen/android/
 src-tauri/Cargo.lock.orig
 
 # ── Svelte / tooling caches ────────────────────────────────────

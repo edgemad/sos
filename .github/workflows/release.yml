@@ -19,6 +19,9 @@ jobs:
             args: ""
           - platform: windows-latest
             args: ""
+          - platform: ubuntu-latest
+            args: "--target aarch64-linux-android"
+            android: true
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -48,7 +51,43 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Set up Java
+        if: matrix.android
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        if: matrix.android
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android Rust targets
+        if: matrix.android
+        run: rustup target add aarch64-linux-android
+
+      - name: Install Tauri Android scaffolding
+        if: matrix.android
+        working-directory: src-tauri
+        run: |
+          cargo install tauri-cli --version '^2' --locked
+          cargo tauri android init || true
+
+      - name: Build Android APK
+        if: matrix.android
+        working-directory: src-tauri
+        env:
+          TAURI_ANDROID_KEYSTORE_PATH: ''
+        run: cargo tauri android build --target aarch64 --apk
+
+      - name: Upload Android APK to release
+        if: matrix.android
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/bundle/android/**/*.apk
+
       - name: Build Tauri app
+        if: ${{ !matrix.android }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
