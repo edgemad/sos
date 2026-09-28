@@ -86,9 +86,13 @@ jobs:
 
       - name: Upload Android APK to release
         if: matrix.android
-        uses: softprops/action-gh-release@v2
-        with:
-          files: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -n 1)
+          test -n "$APK"
+          cp "$APK" "Simple.Office.Suite_1.3.0_aarch64.apk"
+          gh release upload "$GITHUB_REF_NAME" "Simple.Office.Suite_1.3.0_aarch64.apk" --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Build Tauri app
         if: ${{ !matrix.android }}
