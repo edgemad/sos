@@ -7,6 +7,7 @@
   import { exportPdf, toCsv } from "./lib/utils";
   import { evaluateCell, displayValue, colToName } from "./lib/formula";
   import { saveFileDialog, writeFile } from "./lib/tauri";
+  import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, type ToastMsg } from "./lib/uiBridge";
   import Header from "./components/layout/Header.svelte";
   import Rail from "./components/layout/Rail.svelte";
   import StatusBar from "./components/layout/StatusBar.svelte";
@@ -143,6 +144,18 @@
   // ── Crash recovery (OnlyOffice-style): a window error shows a recovery
   // overlay instead of a white screen; user data lives in storage and survives.
   let crashed: string | null = null;
+
+  // ── App-wide dialog/toast host (see lib/uiBridge.ts) ───────────
+  let askReq: AskRequest | null = null;
+  let askInputEl: HTMLInputElement | undefined;
+  let toasts: ToastMsg[] = [];
+  onMount(() => {
+    registerAskHost((r) => {
+      askReq = r;
+      if (r) setTimeout(() => askInputEl?.focus(), 30);
+    });
+    registerToastHost((t) => (toasts = t));
+  });
   function onCrash(e: Event): void {
     crashed = String((e as ErrorEvent).message ?? "unknown error");
     console.error("SOS crash:", e);
@@ -212,6 +225,37 @@
 
   {#if settingsOpen}
     <SettingsModal on:close={() => (settingsOpen = false)} />
+  {/if}
+
+  {#if askReq}
+    <div class="fixed inset-0 z-[150] bg-black/40 grid place-items-center" on:click|self={() => resolveAsk(null)}>
+      <div class="card w-[380px] max-w-[92vw] p-5 shadow-modal" on:click|stopPropagation>
+        <h3 class="font-medium mb-3">{askReq.title}</h3>
+        {#if askReq.kind === "prompt"}
+          <input
+            bind:this={askInputEl}
+            class="input w-full mb-4"
+            placeholder={askReq.placeholder}
+            bind:value={askReq.value}
+            on:keydown={(e) => { if (e.key === "Enter") resolveAsk(askReq?.value ?? null); if (e.key === "Escape") resolveAsk(null); }}
+          />
+        {/if}
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-ghost text-xs" on:click={() => resolveAsk(null)}>Cancel</button>
+          <button class="btn btn-primary text-xs" on:click={() => resolveAsk(askReq?.kind === "prompt" ? askReq?.value ?? "" : "ok")}>
+            {askReq.kind === "prompt" ? "OK" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if toasts.length}
+    <div class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[160] flex flex-col gap-2 items-center">
+      {#each toasts as t (t.id)}
+        <div class="card !py-2 !px-4 text-sm shadow-modal bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">{t.msg}</div>
+      {/each}
+    </div>
   {/if}
   {/if}
 </div>

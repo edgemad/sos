@@ -117,6 +117,12 @@ export async function unzipAsync(bytes: Uint8Array): Promise<Map<string, Uint8Ar
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const files = new Map<string, Uint8Array>();
 
+  // Decompression-bomb & entry-count guards: imported files are untrusted.
+  const MAX_ENTRIES = 512;
+  const MAX_OUTPUT = 128 * 1024 * 1024; // 128 MB total expanded
+  const MAX_SINGLE = 64 * 1024 * 1024; // 64 MB per entry
+  let totalOut = 0;
+
   // Locate End Of Central Directory (scan backwards for signature)
   let eocd = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 66000); i--) {
@@ -127,7 +133,7 @@ export async function unzipAsync(bytes: Uint8Array): Promise<Map<string, Uint8Ar
   const count = view.getUint16(eocd + 10, true);
   let p = view.getUint32(eocd + 16, true);
 
-  for (let n = 0; n < count; n++) {
+  for (let n = 0; n < Math.min(count, MAX_ENTRIES); n++) {
     if (view.getUint32(p, true) !== 0x02014b50) break;
     const method = view.getUint16(p + 10, true);
     const compSize = view.getUint32(p + 20, true);
@@ -149,7 +155,12 @@ export async function unzipAsync(bytes: Uint8Array): Promise<Map<string, Uint8Ar
     else if (method === 8) data = await inflateRaw(raw);
     else throw new Error(`Unsupported compression method ${method} in ${name}`);
 
-    if (!name.endsWith("/")) files.set(name, data);
+    totalOut += data.length;
+    if (data.length > MAX_SINGLE || totalOut > MAX_OUTPUT) {
+      throw new Error("Archive expands too large — import aborted for safety.");
+    }
+
+    if (!name.endsWith("/") && !name.includes("..") && !name.startsWith("/")) files.set(name, data);
     p += 46 + nameLen + extraLen + commentLen;
   }
   return files;

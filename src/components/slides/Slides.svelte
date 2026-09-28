@@ -6,6 +6,7 @@
   import { openFile, updateContent, state, trashFile, duplicateFile, createFile, openInEditor } from "../../lib/state";
   import { uid } from "../../lib/utils";
   import { exportDeckHtml, exportJson, importJson } from "../../lib/converters";
+  import { appPrompt, toast } from "../../lib/uiBridge";
   import type { Deck, Slide, SlideBlock, SlideBlockType, SlideLayout, DeckTheme, TransitionKind } from "../../types";
   import SlideCanvas from "./SlideCanvas.svelte";
   import SlideDeckSidebar from "./SlideDeckSidebar.svelte";
@@ -166,7 +167,7 @@
       const { invoke } = await import("@tauri-apps/api/core");
       return await invoke<string | null>("pick_image_dialog");
     } catch {
-      return prompt("Image URL:");
+      return await appPrompt("Image URL:", "https://");
     }
   }
 
@@ -428,7 +429,7 @@
       const imported = parsed.slides.map((s) => ({ ...s, id: uid(), blocks: (s.blocks ?? []).map((b) => ({ ...b, id: uid() })) }));
       save({ ...deck, slides: [...deck.slides, ...imported] });
     } catch (err) {
-      alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

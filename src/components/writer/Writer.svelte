@@ -5,6 +5,7 @@
   import { openFile, updateContent, writerTabs, addWriterTab, selectWriterTab, renameWriterTab, deleteWriterTab, duplicateFile, trashFile, createFile, openInEditor } from "../../lib/state";
   import { countWords, htmlToMarkdown, htmlToText, escapeHtml, download, exportPdf } from "../../lib/utils";
   import { saveFileDialog, openFileDialog } from "../../lib/tauri";
+  import { appPrompt, toast } from "../../lib/uiBridge";
   import { exportDocx, exportOdt, exportHtml, exportMarkdown, exportTxt, importDocx, importOdt, importRtf, importMarkdown, importHtmlFile, importFilterFor } from "../../lib/converters";
   import type { WriterDoc, WriterSettings } from "../../types";
   import DocsMenubar from "./DocsMenubar.svelte";
@@ -118,7 +119,7 @@
       updateContent(id, { html, activeTabId: null, words: countWords(html), tabs: null, settings: null } as unknown as WriterDoc);
       openInEditor(id);
     } catch (err) {
-      alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -159,7 +160,7 @@
     }
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
     if (!SR) {
-      alert("Voice typing needs the Web Speech API — available in the desktop app and Chrome.");
+      toast("Voice typing needs the Web Speech API — available in the desktop app and Chrome.");
       return;
     }
     recognition = new SR();
@@ -261,20 +262,25 @@
       case "fmt:clear": canvasApi?.exec("removeFormat"); return;
       // Tools
       case "tools:wordcount": dialog = "wordcount"; return;
-      case "tools:spell": alert("Spelling check runs automatically as you type (spellcheck=true)."); return;
+      case "tools:spell": toast("Spelling check runs automatically as you type (spellcheck=true)."); return;
       case "tools:voice": toggleVoice(); return;
       case "tools:dictionary": {
         const sel = window.getSelection()?.toString().trim();
-        const q = sel || prompt("Look up:");
-        if (q) window.open(`https://www.google.com/search?q=define+${encodeURIComponent(q)}`, "_blank");
+        if (sel) {
+          window.open(`https://www.google.com/search?q=define+${encodeURIComponent(sel)}`, "_blank");
+        } else {
+          void appPrompt("Look up:").then((q) => {
+            if (q) window.open(`https://www.google.com/search?q=define+${encodeURIComponent(q)}`, "_blank");
+          });
+        }
         return;
       }
       case "tools:preferences": dialog = "prefs"; return;
-      case "tools:accessibility": alert("Accessibility: full keyboard navigation, screen-reader labels, and high-contrast dark mode are supported."); return;
+      case "tools:accessibility": toast("Accessibility: full keyboard navigation, screen-reader labels, and high-contrast dark mode are supported."); return;
       // Help
       case "help:shortcuts": dialog = "shortcuts"; return;
       case "help:search": dialog = "replace"; return;
-      case "help:about": alert("Simple Office Suite v1.3.0 — offline-first, MIT licensed."); return;
+      case "help:about": toast("Simple Office Suite v1.3.0 — offline-first, MIT licensed."); return;
       // Canvas-only / passthrough
       case "print": doExport("pdf"); return;
       case "paintFormat": canvasApi?.exec("sos:paint-get"); return;
@@ -306,7 +312,7 @@
     }
   }
 
-  function onMenuCmd(d: { cmd: string; payload?: string }): void {
+  async function onMenuCmd(d: { cmd: string; payload?: string }): Promise<void> {
     command(d.cmd, d.payload);
   }
 
@@ -318,8 +324,8 @@
     return e.detail;
   }
 
-  function promptLink(): void {
-    const url = prompt("Link URL:", "https://");
+  async function promptLink(): Promise<void> {
+    const url = await appPrompt("Link URL:", "https://");
     if (url) canvasApi?.exec("createLink", url);
   }
 
@@ -461,8 +467,7 @@
             if (!file) return;
             const id = tabId(e);
             const cur = writerTabs(doc).find((t) => t.id === id);
-            const name = prompt("Tab name:", cur?.name ?? "");
-            if (name) renameWriterTab(file.id, id, name);
+            void appPrompt("Tab name:", cur?.name ?? "").then((name) => { if (name) renameWriterTab(file.id, id, name); });
           }}
           on:deleteTab={(e) => file && deleteWriterTab(file.id, tabId(e))}
           on:gotoHeading={(e) => canvasApi?.scrollToHeading(headingIndex(e))}

@@ -3,6 +3,7 @@
   // Emits edit(html) and exposes exec/focus/scrollToHeading via onApi.
   import { createEventDispatcher, onDestroy, onMount } from "svelte";
   import type { WriterSettings } from "../../types";
+  import { appPrompt } from "../../lib/uiBridge";
 
   export let html: string;
   export let settings: Partial<WriterSettings> = {};
@@ -39,7 +40,7 @@
 
   function exec(cmd: string, val?: string): void {
     editor.focus();
-    if (cmd === "sos:table") return insertTable();
+    if (cmd === "sos:table") { void insertTable(); return; }
     if (cmd === "sos:checklist") return insertChecklist();
     if (cmd === "sos:paint-get") { clipboardFormat = getCurrentFormat(); return; }
     if (cmd === "sos:paint-apply") { applyFormat(); return; }
@@ -118,9 +119,9 @@
     emit();
   }
 
-  function insertTable(): void {
-    const rows = parseInt(prompt("Rows:", "3") ?? "3", 10) || 3;
-    const cols = parseInt(prompt("Columns:", "3") ?? "3", 10) || 3;
+  async function insertTable(): Promise<void> {
+    const rows = parseInt((await appPrompt("Rows:", "3")) ?? "3", 10) || 3;
+    const cols = parseInt((await appPrompt("Columns:", "3")) ?? "3", 10) || 3;
     let t = `<table><tbody>`;
     for (let r = 0; r < rows; r++) {
       t += "<tr>";
