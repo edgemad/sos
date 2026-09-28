@@ -188,7 +188,7 @@
       });
       commitSheets(file.id, { ...data, sheets, activeSheet: 0 });
     } catch (err) {
-      alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -214,8 +214,47 @@
         break;
     }
   }
+  // ── Async dialogs + toasts (Tauri's webview has no window.prompt/alert) ──
+  let sheetAsk: null | { kind: "prompt" | "confirm"; title: string; value: string; placeholder: string; resolve: (v: string | null) => void } = null;
+  let askInput: HTMLInputElement | undefined;
+
+  function sheetPrompt(title: string, value = "", placeholder = ""): Promise<string | null> {
+    return new Promise((resolve) => {
+      sheetAsk = { kind: "prompt", title, value, placeholder, resolve };
+      setTimeout(() => askInput?.focus(), 30);
+    });
+  }
+
+  function sheetConfirm(title: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      sheetAsk = { kind: "confirm", title, value: "", placeholder: "", resolve };
+    });
+  }
+
+  function askOk(): void {
+    sheetAsk?.resolve(sheetAsk.kind === "prompt" ? sheetAsk.value : "ok");
+    sheetAsk = null;
+  }
+
+  function askCancel(): void {
+    sheetAsk?.resolve(null);
+    sheetAsk = null;
+  }
+
+  let toasts: { id: number; msg: string }[] = [];
+  let toastSeq = 0;
+  function toast(msg: string): void {
+    const id = ++toastSeq;
+    toasts = [...toasts, { id, msg }];
+    setTimeout(() => {
+      toasts = toasts.filter((t) => t.id !== id);
+    }, 2600);
+  }
+
   let findText = "";
   let replaceText = "";
+  let newName = "";
+  let newRange = "";
   let ddOptions = "";
   let noteText = "";
   let statsCol: { col: string; sum: number; avg: number; min: number; max: number; count: number } | null = null;
@@ -483,7 +522,7 @@
     for (const key of Object.keys(t.cells)) {
       if (t.cells[key] === "") continue;
       try {
-        out[key] = fmtValue(evaluateCell(t, key), metas[key]);
+        out[key] = fmtValue(evaluateCell(t, key, data, data?.names), metas[key]);
       } catch {
         out[key] = ERROR;
       }
@@ -498,6 +537,12 @@
     if (m.i) s += "font-style:italic;";
     if (m.color) s += `color:${m.color};`;
     if (m.bg) s += `background:${m.bg};`;
+    const raw = tab?.cells[key] ?? "";
+    const computed = display[key] ?? "";
+    // Numbers default right-aligned (OnlyOffice/Sheets behavior) unless overridden.
+    const isNum = raw !== "" && computed !== "" && !Number.isNaN(parseFloat(computed.replace(/[$,%]/g, ""))) && !raw.startsWith("=") || /^=[A-Z]+[0-9]+$/.test(raw) && computed !== "" && !Number.isNaN(parseFloat(computed));
+    if (m.align) s += `justify-content:${m.align === "center" ? "center" : m.align === "right" ? "flex-end" : "flex-start"};`;
+    else if (isNum) s += "justify-content:flex-end;";
     return s;
   }
 
@@ -589,7 +634,7 @@
       const key = cellKey(r, selCol);
       const raw = tab.cells[key];
       if (raw === undefined || raw === "") continue;
-      entries.push({ r, v: raw.startsWith("=") ? (() => { try { return evaluateCell(tab, key); } catch { return ERROR; } })() : raw });
+      entries.push({ r, v: raw.startsWith("=") ? (() => { try { return evaluateCell(tab, key, data, data.names); } catch { return ERROR; } })() : raw });
     }
     entries.sort((a, b) => {
       const na = typeof a.v === "number" ? a.v : parseFloat(String(a.v));
@@ -644,7 +689,7 @@
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
     commitSheets(file.id, { ...data, sheets });
-    alert(`Trimmed whitespace in ${n} cell(s).`);
+    toast(`Trimmed whitespace in ${n} cell(s).`);
   }
 
   function removeDuplicates(): void {
@@ -658,7 +703,7 @@
       if (sig && seen.has(sig)) drop.add(r);
       else if (sig) seen.add(sig);
     }
-    if (drop.size === 0) { alert("No duplicates found."); return; }
+    if (drop.size === 0) { toast("No duplicates found."); return; }
     const cells: Record<string, string> = {};
     let w = 0;
     for (let r = 0; r < tab.rows; r++) {
@@ -672,22 +717,24 @@
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
     commitSheets(file.id, { ...data, sheets });
-    alert(`Removed ${drop.size} duplicate row(s).`);
+    toast(`Removed ${drop.size} duplicate row(s).`);
   }
 
   function splitToColumns(): void {
-    const sep = prompt("Split on character:", ",");
-    if (!sep || !file || !data || !tab) return;
-    const cells = { ...tab.cells };
-    const src = cellKey(selRow, selCol);
-    const parts = (cells[src] ?? "").split(sep);
-    delete cells[src];
-    parts.forEach((p, i) => {
-      if (p !== "") cells[cellKey(selRow, selCol + i)] = p.trim();
+    if (!file || !data || !tab) return;
+    void sheetPrompt("Split on character", ",", ",").then((sep) => {
+      if (!sep || !file || !data || !tab) return;
+      const cells = { ...tab.cells };
+      const src = cellKey(selRow, selCol);
+      const parts = (cells[src] ?? "").split(sep);
+      delete cells[src];
+      parts.forEach((p, i) => {
+        if (p !== "") cells[cellKey(selRow, selCol + i)] = p.trim();
+      });
+      const sheets = [...data.sheets];
+      sheets[data.activeSheet] = { ...tab, cells, cols: Math.max(tab.cols, selCol + parts.length) };
+      commitSheets(file.id, { ...data, sheets });
     });
-    const sheets = [...data.sheets];
-    sheets[data.activeSheet] = { ...tab, cells, cols: Math.max(tab.cols, selCol + parts.length) };
-    commitSheets(file.id, { ...data, sheets });
   }
 
   function columnStats(): void {
@@ -697,7 +744,7 @@
       const key = cellKey(r, selCol);
       const raw = tab.cells[key];
       if (!raw) continue;
-      const v = raw.startsWith("=") ? (() => { try { return evaluateCell(tab, key); } catch { return null; } })() : parseFloat(raw);
+      const v = raw.startsWith("=") ? (() => { try { return evaluateCell(tab, key, data, data?.names); } catch { return null; } })() : parseFloat(raw);
       if (typeof v === "number" && Number.isFinite(v)) nums.push(v);
     }
     const col = colToName(selCol);
@@ -739,11 +786,12 @@
 
   function renameSheet(i: number): void {
     if (!file || !data) return;
-    const name = prompt("Sheet name:", data.sheets[i].name);
-    if (!name) return;
-    const sheets = [...data.sheets];
-    sheets[i] = { ...sheets[i], name };
-    updateContent(file.id, { ...data, sheets });
+    void sheetPrompt("Sheet name", data.sheets[i].name).then((name) => {
+      if (!name || !file || !data) return;
+      const sheets = [...data.sheets];
+      sheets[i] = { ...sheets[i], name };
+      commitSheets(file.id, { ...data, sheets });
+    });
   }
 
   function duplicateSheet(i: number): void {
@@ -770,9 +818,11 @@
 
   function deleteSheet(i: number): void {
     if (!file || !data || data.sheets.length <= 1) return;
-    if (!confirm(`Delete sheet "${data.sheets[i].name}"? You can undo with ⌘Z.`)) return;
-    const sheets = data.sheets.filter((_, k) => k !== i);
-    commitSheets(file.id, { ...data, sheets, activeSheet: Math.max(0, Math.min(data.activeSheet, sheets.length - 1)) });
+    void sheetConfirm(`Delete sheet "${data.sheets[i].name}"? You can undo with ⌘Z.`).then((ok) => {
+      if (!ok || !file || !data) return;
+      const sheets = data.sheets.filter((_, k) => k !== i);
+      commitSheets(file.id, { ...data, sheets, activeSheet: Math.max(0, Math.min(data.activeSheet, sheets.length - 1)) });
+    });
   }
 
   // ── Import / export / save ──────────────────────────────────────
@@ -863,7 +913,7 @@
       case "file:dl-csv": void doSheetExport("csv"); break;
       case "file:dl-json": if (file) download(`${file.name.replace(/[\\/:*?"<>|]/g, "_")}.json`, JSON.stringify(file, null, 2), "application/json"); break;
       case "file:save": window.dispatchEvent(new CustomEvent("sos:save-request")); break;
-      case "file:rename": { const n = prompt("Rename spreadsheet:", file?.name); if (n && file) import("../../lib/state").then((m) => m.renameFile(file.id, n)); break; }
+      case "file:rename": void sheetPrompt("Rename spreadsheet", file?.name ?? "").then((n) => { if (n && file) import("../../lib/state").then((m) => m.renameFile(file.id, n)); }); break;
       case "file:details": dialog = "details"; break;
       case "file:trash": if (file) import("../../lib/state").then((m) => m.trashFile(file.id)); break;
       case "file:print": printSheet(); break;
@@ -898,7 +948,7 @@
           : "";
         dialog = "chart";
         break;
-      case "insert:link": { const url = prompt("Link URL:"); if (url) patchMeta({ note: url }); break; }
+      case "insert:link": void sheetPrompt("Link URL").then((url) => { if (url) patchMeta({ note: url }); }); break;
       case "insert:emoji": emojiTarget = "cell"; dialog = "emoji"; break;
       case "insert:date": { editValue = new Date().toLocaleDateString(); commit(); break; }
       case "fmt:bold": patchMeta({ b: !metaOf(cellKey(selRow, selCol)).b }); break;
@@ -910,8 +960,8 @@
       case "fmt:round0": patchMeta({ fmt: "round0" }); break;
       case "fmt:round2": patchMeta({ fmt: "round2" }); break;
       case "fmt:auto": patchMeta({ fmt: "auto" }); break;
-      case "fmt:color": { const c = prompt("Text color hex:", "#ff0000"); if (c) patchMeta({ color: c }); break; }
-      case "fmt:bg": { const c = prompt("Fill color hex:", "#fff2cc"); if (c) patchMeta({ bg: c }); break; }
+      case "fmt:color": void sheetPrompt("Text color (hex)", "#ff0000").then((c) => { if (c) patchMeta({ color: c }); }); break;
+      case "fmt:bg": void sheetPrompt("Fill color (hex)", "#fff2cc").then((c) => { if (c) patchMeta({ bg: c }); }); break;
       case "fmt:align-left": patchMeta({ align: "left" } as Partial<CellMeta>); break;
       case "fmt:align-center": patchMeta({ align: "center" } as Partial<CellMeta>); break;
       case "fmt:align-right": patchMeta({ align: "right" } as Partial<CellMeta>); break;
@@ -923,16 +973,16 @@
       case "data:cleanup-dedupe": removeDuplicates(); break;
       case "data:split": splitToColumns(); break;
       case "data:stats": columnStats(); break;
-      case "data:named-range": dialog = "named"; break;
+      case "data:named-range": { newName = ""; newRange = selRange ? `${cellKey(selRange.r0, selRange.c0)}:${cellKey(selRange.r1, selRange.c1)}` : `${selKey}:${selKey}`; dialog = "named"; break; }
       case "data:validate": dialog = "validate"; break;
       case "tools:form": window.dispatchEvent(new CustomEvent("sos:new-form")); break;
-      case "tools:macro": alert("Macros: use File → Make a copy to script batch edits; the formula engine covers SUMIF/COUNTIF chains."); break;
+      case "tools:macro": toast("Macros: use File → Make a copy to script batch edits."); break;
       case "tools:stats": columnStats(); break;
       case "tools:protect": dialog = "protect"; break;
       case "help:search": dialog = "find"; break;
       case "help:fnlist": dialog = "fnlist"; break;
       case "help:shortcuts": dialog = "shortcuts"; break;
-      case "help:about": alert("Simple Office Suite v1.2.0 — offline-first, MIT licensed."); break;
+      case "help:about": toast("Simple Office Suite v1.3.0 — offline-first, MIT licensed."); break;
     }
   }
 
@@ -965,7 +1015,7 @@
         if (v.includes(q)) { selRow = r; selCol = c; scrollCellIntoView(); return; }
       }
     }
-    alert(`"${findText}" not found.`);
+    toast(`"${findText}" not found.`);
   }
 
   function replaceAllCells(): void {
@@ -980,7 +1030,7 @@
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
     commitSheets(file.id, { ...data, sheets });
-    alert(`Replaced in ${n} cell(s).`);
+    toast(`Replaced in ${n} cell(s).`);
   }
 
   $: selKey = cellKey(selRow, selCol);
@@ -1010,6 +1060,27 @@
     commitSheets(file.id, { ...data, sheets });
   }
 
+  // ── Named ranges ────────────────────────────────────────────────
+
+  function addNamedRange(): void {
+    if (!file || !data) return;
+    const name = newName.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "");
+    const ref = newRange.trim().toUpperCase();
+    if (!name || !ref) { toast("Enter both a name and a range."); return; }
+    if (!parseRangeText(ref)) { toast("Range must look like A1:B5."); return; }
+    const names = { ...(data.names ?? {}), [name]: ref };
+    commitSheets(file.id, { ...data, names });
+    newName = "";
+    toast(`${name} → ${ref}`);
+  }
+
+  function removeNamedRange(name: string): void {
+    if (!file || !data) return;
+    const names = { ...(data.names ?? {}) };
+    delete names[name];
+    commitSheets(file.id, { ...data, names });
+  }
+
   // ── Charts ──────────────────────────────────────────────────────
 
   function parseRangeText(text: string): SheetChart["range"] | null {
@@ -1027,7 +1098,7 @@
     if (!file || !data || !tab) return;
     const parsed = parseRangeText(range);
     if (!parsed) {
-      alert("Invalid range — use a rectangle like A1:B5.");
+      toast("Invalid range — use a rectangle like A1:B5.");
       return;
     }
     const chart: SheetChart = {
@@ -1509,7 +1580,24 @@
           </div>
         {:else if dialog === "named"}
           <h3 class="font-medium mb-3">Named ranges</h3>
-          <p class="text-xs text-gray-500 mb-3">This sheet supports direct references (A1, A1:B9) everywhere formulas are accepted. Named-range aliases are on the roadmap.</p>
+          {#if Object.keys(data?.names ?? {}).length}
+            <div class="space-y-1 mb-3 max-h-40 overflow-y-auto">
+              {#each Object.entries(data?.names ?? {}) as [n, ref] (n)}
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="font-mono font-semibold">{n}</span>
+                  <span class="font-mono text-xs text-gray-500 flex-1">{ref}</span>
+                  <button class="btn btn-ghost !h-6 !px-1.5 text-xs" title="Remove {n}" on:click={() => removeNamedRange(n)}>✕</button>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-xs text-gray-500 mb-3">No named ranges yet. Use them in formulas like <code class="font-mono">=SUM(Sales)</code>.</p>
+          {/if}
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <input class="input w-full font-mono" placeholder="NAME" bind:value={newName} />
+            <input class="input w-full font-mono" placeholder="A1:B5" bind:value={newRange} />
+          </div>
+          <button class="btn btn-primary text-xs w-full" on:click={addNamedRange}>Add named range</button>
         {:else if dialog === "shortcuts"}
           <h3 class="font-medium mb-3">Keyboard shortcuts</h3>
           <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm max-h-[50vh] overflow-y-auto">
@@ -1535,12 +1623,41 @@
         {:else if dialog === "protect"}
           <h3 class="font-medium mb-3">Protect sheet</h3>
           <p class="text-xs text-gray-500 mb-3">Local-first protection: sheet data lives only on this machine. Show a warning banner when editing?</p>
-          <button class="btn btn-primary text-xs" on:click={() => { alert("Protection banner enabled for this session."); dialog = null; }}>Enable</button>
+          <button class="btn btn-primary text-xs" on:click={() => { toast("Protection banner enabled for this session."); dialog = null; }}>Enable</button>
         {/if}
         <div class="flex justify-end mt-4">
           <button class="btn btn-primary" on:click={() => (dialog = null)}>Done</button>
         </div>
       </div>
+    </div>
+  {/if}
+
+  {#if sheetAsk}
+    <div class="fixed inset-0 z-[90] bg-black/40 grid place-items-center" on:click|self={askCancel}>
+      <div class="card w-[380px] max-w-[92vw] p-5 shadow-modal" on:click|stopPropagation>
+        <h3 class="font-medium mb-3">{sheetAsk.title}</h3>
+        {#if sheetAsk.kind === "prompt"}
+          <input
+            bind:this={askInput}
+            class="input w-full mb-4"
+            placeholder={sheetAsk.placeholder}
+            bind:value={sheetAsk.value}
+            on:keydown={(e) => { if (e.key === "Enter") askOk(); if (e.key === "Escape") askCancel(); }}
+          />
+        {/if}
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-ghost text-xs" on:click={askCancel}>Cancel</button>
+          <button class="btn btn-primary text-xs" on:click={askOk}>{sheetAsk.kind === "prompt" ? "OK" : "Delete"}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if toasts.length}
+    <div class="fixed bottom-12 left-1/2 -translate-x-1/2 z-[95] flex flex-col gap-2 items-center">
+      {#each toasts as t (t.id)}
+        <div class="card !py-2 !px-4 text-sm shadow-modal bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">{t.msg}</div>
+      {/each}
     </div>
   {/if}
 

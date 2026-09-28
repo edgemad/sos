@@ -1,9 +1,10 @@
 // Spreadsheet formula engine.
-// Supports: numbers, strings, cell refs (A1), ranges (A1:B3), arithmetic
-// (+ - * / % ^), comparisons, functions (SUM, AVERAGE, COUNT, IF, MIN, MAX,
-// ROUND, ABS, SQRT) and error propagation.
+// Supports: numbers, strings, cell refs (A1), $-anchored refs, ranges
+// (A1:B3), cross-sheet refs (Sheet2!A1, Sheet2!A1:B5), named ranges,
+// arithmetic (+ - * / % ^ & postfix %), comparisons, lookups (VLOOKUP,
+// HLOOKUP, INDEX, MATCH) and ~30 functions with error propagation.
 
-import type { SheetTab } from "../types";
+import type { SheetData, SheetTab } from "../types";
 
 export type CellValue = number | string | boolean | null;
 export type Grid = Record<string, string>; // "A1" -> raw input
@@ -11,11 +12,11 @@ export type Grid = Record<string, string>; // "A1" -> raw input
 export const ERROR = "#ERROR!";
 
 interface Token {
-  type: "num" | "str" | "ref" | "range" | "func" | "op" | "lp" | "rp" | "comma";
+  type: "num" | "str" | "ref" | "range" | "sheetref" | "sheetrange" | "func" | "op" | "lp" | "rp" | "comma";
   value: string;
 }
 
-function tokenize(src: string): Token[] {
+function tokenize(src: string, resolveName?: (id: string) => string | null): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < src.length) {
@@ -42,6 +43,28 @@ function tokenize(src: string): Token[] {
       // range like A1:B3 — tolerate whitespace and $ anchors around the colon
       let j = i;
       while (j < src.length && /\s/.test(src[j])) j++;
+      // Cross-sheet reference: Sheet2!A1 or Sheet2!A1:B5
+      if (src[j] === "!" && /^[A-Z_][A-Z0-9_ ]*$/.test(cleanId)) {
+        j++; // bang
+        while (j < src.length && /\s/.test(src[j])) j++;
+        let id2 = "";
+        while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) id2 += src[j++];
+        const clean2 = id2.replace(/\$/g, "").toUpperCase();
+        let k = j;
+        while (k < src.length && /\s/.test(src[k])) k++;
+        if (src[k] === ":" && /[A-Za-z$]/.test(src[k + 1] ?? "")) {
+          k++; // colon
+          while (k < src.length && /\s/.test(src[k])) k++;
+          let ref2 = "";
+          while (k < src.length && /[A-Za-z0-9_$]/.test(src[k])) ref2 += src[k++];
+          i = k;
+          tokens.push({ type: "sheetrange", value: `${cleanId}!${clean2}:${ref2.replace(/\$/g, "").toUpperCase()}` });
+        } else {
+          i = j;
+          tokens.push({ type: "sheetref", value: `${cleanId}!${clean2}` });
+        }
+        continue;
+      }
       if (src[j] === ":" && /[A-Za-z$]/.test(src[j + 1] ?? "")) {
         j++; // colon
         while (j < src.length && /\s/.test(src[j])) j++;
@@ -65,6 +88,15 @@ function tokenize(src: string): Token[] {
       } else if (src[j] === "(") {
         i = j;
         tokens.push({ type: "func", value: cleanId });
+      } else if (resolveName) {
+        const expanded = resolveName(cleanId);
+        if (expanded) {
+          tokens.push(expanded.includes(":")
+            ? { type: "range", value: expanded.toUpperCase() }
+            : { type: "ref", value: expanded.toUpperCase() });
+        } else {
+          tokens.push({ type: "ref", value: cleanId });
+        }
       } else {
         tokens.push({ type: "ref", value: cleanId });
       }
@@ -144,31 +176,67 @@ export function referencedCells(raw: string): string[] {
 
 // ── Evaluation ──────────────────────────────────────────────────
 
+export const NA = "#N/A";
+export const REF = "#REF!";
+
+export interface NamedRange {
+  name: string;
+  ref: string; // e.g. "Sheet1!A1:B5" or "A1:B5" (active sheet)
+}
+
 interface EvalCtx {
   tab: SheetTab;
+  /** Whole workbook — enables Sheet2!A1 cross-sheet refs. Optional. */
+  workbook?: SheetData | null;
+  /** Named ranges: SALES -> "Sheet1!A1:B5". */
+  names?: Record<string, string>;
   cache: Map<string, CellValue>;
   visiting: Set<string>;
 }
 
-/** The computed value behind a cell: numbers, strings, booleans or errors. */
-export function evaluateCell(tab: SheetTab, key: string): CellValue {
-  const ctx: EvalCtx = { tab, cache: new Map(), visiting: new Set() };
+/**
+ * Evaluate a cell. `workbook` and `names` are optional; when omitted the
+ * engine behaves exactly like the legacy single-sheet evaluator.
+ */
+export function evaluateCell(tab: SheetTab, key: string, workbook?: SheetData | null, names?: Record<string, string>): CellValue {
+  const ctx: EvalCtx = { tab, workbook: workbook ?? null, names: names ?? {}, cache: new Map(), visiting: new Set() };
   return evalKey(key.toUpperCase(), ctx);
+}
+
+function sheetByName(ctx: EvalCtx, name: string): SheetTab | null {
+  if (!ctx.workbook) return null;
+  const n = name.trim().toLowerCase();
+  return ctx.workbook.sheets.find((s) => s.name.toLowerCase() === n) ?? null;
+}
+
+function tabOf(ctx: EvalCtx, sheetName: string | null): SheetTab {
+  if (!sheetName) return ctx.tab;
+  return sheetByName(ctx, sheetName) ?? ctx.tab;
+}
+
+function splitSheetRef(ref: string): { sheet: string | null; cell: string } {
+  const bang = ref.indexOf("!");
+  if (bang === -1) return { sheet: null, cell: ref };
+  return { sheet: ref.slice(0, bang), cell: ref.slice(bang + 1) };
 }
 
 function evalKey(key: string, ctx: EvalCtx): CellValue {
   if (ctx.cache.has(key)) return ctx.cache.get(key)!;
   if (ctx.visiting.has(key)) return ERROR; // circular reference
-  const raw = ctx.tab.cells[key];
+  const { sheet, cell } = splitSheetRef(key);
+  const target = tabOf(ctx, sheet);
+  const raw = target.cells[cell];
   if (raw === undefined || raw === "") return null;
-  ctx.visiting.add(key);
+  // Only the originating cell guards cycles in its own sheet; cross-sheet
+  // cells are resolved with their own key for the visiting set.
+  ctx.visiting.add(sheet ? `${sheet}!${cell}` : cell);
   let out: CellValue;
   try {
-    out = raw.startsWith("=") ? evalFormula(raw.slice(1), ctx) : literal(raw);
+    out = raw.startsWith("=") ? evalFormula(raw.slice(1), ctx, sheet) : literal(raw);
   } catch {
     out = ERROR;
   }
-  ctx.visiting.delete(key);
+  ctx.visiting.delete(sheet ? `${sheet}!${cell}` : cell);
   ctx.cache.set(key, out);
   return out;
 }
@@ -182,8 +250,14 @@ function literal(raw: string): CellValue {
   return t;
 }
 
-function evalFormula(src: string, ctx: EvalCtx): CellValue {
-  const tokens = tokenize(src);
+function evalFormula(src: string, ctx: EvalCtx, sheetName: string | null = null): CellValue {
+  const tokens = tokenize(src, (id) => {
+    const ref = ctx.names?.[id];
+    if (!ref) return null;
+    const { sheet, cell } = splitSheetRef(ref);
+    // A name defined on another sheet still resolves in the caller's context.
+    return (sheet && sheet.toLowerCase() !== (sheetName ?? ctx.tab.name.toLowerCase()) ? ref : cell);
+  });
   let pos = 0;
 
   const peek = () => tokens[pos];
@@ -271,9 +345,21 @@ function evalFormula(src: string, ctx: EvalCtx): CellValue {
       if (!/^[A-Z]+[0-9]+$/.test(t.value)) return "#NAME?";
       return evalKey(t.value, ctx);
     }
+    if (t.type === "sheetref") {
+      eat();
+      const { sheet, cell } = splitSheetRef(t.value);
+      if (!/^[A-Z]+[0-9]+$/.test(cell) || !sheetByName(ctx, sheet ?? "")) return REF;
+      return evalKey(t.value, ctx);
+    }
+    if (t.type === "sheetrange") {
+      eat();
+      const { sheet, cell } = splitSheetRef(t.value);
+      if (!sheetByName(ctx, sheet ?? "")) return REF;
+      return rangeValues(cell, ctx, sheet);
+    }
     if (t.type === "range") {
       eat();
-      return rangeValues(t.value, ctx);
+      return rangeValues(t.value, ctx, sheetName);
     }
     if (t.type === "func") {
       eat();
@@ -296,18 +382,32 @@ function evalFormula(src: string, ctx: EvalCtx): CellValue {
 
   const out = parseCompare();
   if (pos !== tokens.length) throw new Error("Trailing tokens");
+  // A bare range as the final value (=Sales, =A1:B2) behaves like implicit
+  // intersection: collapse to its first cell.
+  const r = out as unknown as { __range?: boolean; vals?: CellValue[] };
+  if (r && r.__range && Array.isArray(r.vals)) return r.vals[0] ?? null;
   return out;
 }
 
-function rangeValues(spec: string, ctx: EvalCtx): CellValue {
+function rangeValues(spec: string, ctx: EvalCtx, sheetName: string | null = null): CellValue {
   const [a, b] = spec.split(":");
   const pa = parseRef(a), pb = parseRef(b);
   if (!pa || !pb) return ERROR;
+  const target = tabOf(ctx, sheetName);
   const vals: CellValue[] = [];
   for (let r = Math.min(pa.row, pb.row); r <= Math.max(pa.row, pb.row); r++)
-    for (let c = Math.min(pa.col, pb.col); c <= Math.max(pa.col, pb.col); c++)
-      vals.push(evalKey(cellKey(r, c), ctx));
-  return { __range: true, vals } as unknown as CellValue;
+    for (let c = Math.min(pa.col, pb.col); c <= Math.max(pa.col, pb.col); c++) {
+      const k = cellKey(r, c);
+      const raw = target.cells[k];
+      if (raw === undefined || raw === "") { vals.push(null); continue; }
+      if (raw.startsWith("=")) {
+        try {
+          const sub: EvalCtx = { ...ctx, cache: new Map(), visiting: new Set() };
+          vals.push(evalFormula(raw.slice(1), sub, sheetName));
+        } catch { vals.push(ERROR); }
+      } else vals.push(literal(raw));
+    }
+  return { __range: true, vals, __cols: Math.abs(pa.col - pb.col) + 1 } as unknown as CellValue;
 }
 
 function flatten(args: CellValue[]): { nums: number[]; strings: string[] } {
@@ -332,6 +432,22 @@ function flattenAll(args: CellValue[]): { nums: number[]; strings: string[]; all
     else if (typeof v === "boolean") nums.push(v ? 1 : 0);
   }
   return { nums, strings, all };
+}
+
+/** Column count behind a range argument (row-major flattening). */
+function rangeShape(arg: CellValue): number {
+  const r = arg as unknown as { __range?: boolean; vals?: CellValue[]; __cols?: number };
+  if (r && r.__cols) return r.__cols;
+  // Without shape info assume a single column (most common lookup layout).
+  return 1;
+}
+
+function looseEquals(a: CellValue, b: CellValue): boolean {
+  if (a === null || a === undefined) return b === null || b === "";
+  if (typeof a === "number" && typeof b === "string") return a === parseFloat(b);
+  if (typeof a === "string" && typeof b === "number") return parseFloat(a) === b;
+  if (typeof a === "string" && typeof b === "string") return a.toLowerCase() === b.toLowerCase();
+  return a === b;
 }
 
 /** Criteria like ">5", "<=10", "=text", "text" or plain value. */
@@ -530,7 +646,69 @@ function callFn(name: string, args: CellValue[], ctx: EvalCtx): CellValue {
       return truthy ? scalar(args, 1) ?? true : scalar(args, 2) ?? false;
     }
     case "IFERROR":
-      return args[0] === ERROR || args[0] === "#DIV/0!" ? args[1] ?? "" : args[0];
+      return args[0] === ERROR || args[0] === "#DIV/0!" || args[0] === NA ? args[1] ?? "" : args[0];
+    case "COUNTBLANK": {
+      const vals = (args[0] as unknown as { __range?: boolean; vals?: CellValue[] })?.vals;
+      if (!vals) return ERROR;
+      return vals.filter((v) => v === null || v === "").length;
+    }
+    case "SUMPRODUCT": {
+      const lists = args.map((a) => (a as unknown as { __range?: boolean; vals?: CellValue[] }));
+      if (lists.some((l) => !l || !l.__range || !Array.isArray(l.vals))) return ERROR;
+      const len = Math.min(...lists.map((l) => l.vals!.length));
+      let acc = 0;
+      for (let i = 0; i < len; i++) {
+        const prod = lists.reduce((acc2, l) => acc2 * (num(l.vals![i]) ?? 0), 1);
+        acc += prod;
+      }
+      return acc;
+    }
+    case "MATCH": {
+      const needle = args[0];
+      const vals = (args[1] as unknown as { __range?: boolean; vals?: CellValue[] })?.vals;
+      if (!vals) return ERROR;
+      for (let i = 0; i < vals.length; i++) {
+        if (looseEquals(vals[i], needle)) return i + 1;
+      }
+      return NA;
+    }
+    case "INDEX": {
+      const vals = (args[0] as unknown as { __range?: boolean; vals?: CellValue[] })?.vals;
+      if (!vals) return scalar(args, 0);
+      const idx = Math.floor(num(scalar(args, 1)) ?? 0);
+      if (idx < 1 || idx > vals.length) return REF;
+      return vals[idx - 1] ?? null;
+    }
+    case "VLOOKUP": {
+      const needle = args[0];
+      const table = (args[1] as unknown as { __range?: boolean; vals?: CellValue[] })?.vals;
+      if (!table) return ERROR;
+      const cols = rangeShape(args[1]);
+      const colIdx = Math.floor(num(scalar(args, 2)) ?? 1) - 1;
+      if (colIdx < 0) return REF;
+      for (let row = 0; row < table.length; row += cols) {
+        if (looseEquals(table[row], needle)) {
+          const v = table[row + colIdx];
+          return v === undefined ? REF : v;
+        }
+      }
+      return NA;
+    }
+    case "HLOOKUP": {
+      const needle = args[0];
+      const table = (args[1] as unknown as { __range?: boolean; vals?: CellValue[] })?.vals;
+      if (!table) return ERROR;
+      const cols = rangeShape(args[1]);
+      const rowIdx = Math.floor(num(scalar(args, 2)) ?? 1) - 1;
+      if (rowIdx < 0) return REF;
+      for (let c = 0; c < cols; c++) {
+        if (looseEquals(table[c], needle)) {
+          const v = table[rowIdx * cols + c];
+          return v === undefined ? REF : v;
+        }
+      }
+      return NA;
+    }
     case "CONCAT":
     case "CONCATENATE": {
       void ctx;

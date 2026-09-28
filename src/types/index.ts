@@ -73,11 +73,15 @@ export interface CellMeta {
   i?: boolean;
   color?: string;
   bg?: string;
+  /** horizontal cell alignment (OnlyOffice-style) */
+  align?: "left" | "center" | "right";
 }
 
 export interface SheetData {
   sheets: SheetTab[];
   activeSheet: number;
+  /** Named ranges: NAME -> "Sheet1!A1:B5" (sheet optional = active sheet). */
+  names?: Record<string, string>;
 }
 
 /** A chart rendered as an overlay on the grid, computed from a cell range. */

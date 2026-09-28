@@ -4,7 +4,7 @@ export interface FormulaFnInfo {
   name: string;
   signature: string;
   description: string;
-  category: "Math" | "Statistical" | "Logical" | "Text" | "Date";
+  category: "Math" | "Statistical" | "Logical" | "Text" | "Date" | "Lookup";
 }
 
 export const FORMULA_FNS: FormulaFnInfo[] = [
@@ -14,6 +14,12 @@ export const FORMULA_FNS: FormulaFnInfo[] = [
   { name: "COUNTA", signature: "COUNTA(range)", description: "Counts all non-empty values.", category: "Statistical" },
   { name: "COUNTIF", signature: "COUNTIF(range, criterion)", description: "Counts values matching a criterion, e.g. \">5\".", category: "Statistical" },
   { name: "SUMIF", signature: "SUMIF(range, criterion, [sum_range])", description: "Sums values matching a criterion.", category: "Math" },
+  { name: "SUMPRODUCT", signature: "SUMPRODUCT(range1, range2, …)", description: "Multiplies ranges element-wise and sums the products.", category: "Math" },
+  { name: "COUNTBLANK", signature: "COUNTBLANK(range)", description: "Counts empty cells in a range.", category: "Statistical" },
+  { name: "VLOOKUP", signature: "VLOOKUP(value, table, col_index)", description: "Searches the first column of a table and returns a value from another column.", category: "Lookup" },
+  { name: "HLOOKUP", signature: "HLOOKUP(value, table, row_index)", description: "Searches the first row of a table and returns a value from another row.", category: "Lookup" },
+  { name: "INDEX", signature: "INDEX(range, position)", description: "Returns the value at a position within a range.", category: "Lookup" },
+  { name: "MATCH", signature: "MATCH(value, range)", description: "Returns the position of a value within a range.", category: "Lookup" },
   { name: "MIN", signature: "MIN(range)", description: "Smallest numeric value.", category: "Statistical" },
   { name: "MAX", signature: "MAX(range)", description: "Largest numeric value.", category: "Statistical" },
   { name: "MEDIAN", signature: "MEDIAN(range)", description: "Middle value of the range.", category: "Statistical" },

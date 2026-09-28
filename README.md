@@ -18,6 +18,10 @@ Documents · Spreadsheets · Presentations · Forms · Notes · Calendar — zer
 | 🎀 **Ribbon UI** | Office-style tabbed function ribbon in every editor — context tabs per module, collapsible, grouped commands |
 | 📄 **Docs** | Rich text WYSIWYG editor with Home (undo/redo, font styles, colors, lists, alignment) and Insert (tables, links, rules) ribbon tabs, A4 page canvas, auto-save, word count, PDF/Markdown/plaintext export |
 | 📊 **Sheets** | Virtualized grid, ribbon quick-functions (`Σ SUM`, `x̄ AVG`, `COUNT`, `MIN`, `MAX` one-click wraps), full Formulas tab (math + logic + text), Go-to-cell navigation, CSV import/export, multi-tab workbooks, live SUM/COUNT/AVG stats, **floating charts** (bar / line / pie over any range) and **full undo/redo** (⌘Z / ⌘Y) across cell edits, sorts, fills, row/column and tab operations |
+
+#### Formula engine
+
+Cross-sheet references (`=Sheet2!A1`, `=SUM(Data!A1:A3)`), **named ranges** (`=SUM(Sales)` — manage via Data ▸ Named ranges…), lookups (**VLOOKUP / HLOOKUP / INDEX / MATCH**), SUMPRODUCT, COUNTBLANK, `$`-anchored refs, `&` concatenation, postfix `%`, TRUE/FALSE literals, and ~30 functions with error values (`#REF!`, `#N/A`, `#DIV/0!`, `#NAME?`) — all covered by unit tests (`npm test`).
 | 🖼️ **Slides** | 16:9 canvas, ribbon block insertion (title/text/shape/code/image), arrange (front/back), Design tab with background palette, deck sidebar, **fullscreen presenter view with stopwatch & speaker notes** |
 | 📝 **Forms** | Question builder (short/paragraph/multiple-choice/checkbox/linear scale), live preview, response tallying with bar charts |
 | 🗒️ **Keep** | Colored notes, pinning, checklists, search |

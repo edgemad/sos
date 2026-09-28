@@ -76,7 +76,7 @@
         for (let c = 0; c < tab.cols; c++) {
           const key = colToName(c) + (r + 1);
           const raw = tab.cells[key];
-          row.push(raw && raw.startsWith("=") ? (() => { try { return displayValue(evaluateCell(tab, key)); } catch { return "#ERROR!"; } })() : raw ?? "");
+          row.push(raw && raw.startsWith("=") ? (() => { try { return displayValue(evaluateCell(tab, key, data, data.names)); } catch { return "#ERROR!"; } })() : raw ?? "");
         }
         grid.push(row);
       }
@@ -139,9 +139,37 @@
 
   void renameFile;
   void modLabel;
+
+  // ── Crash recovery (OnlyOffice-style): a window error shows a recovery
+  // overlay instead of a white screen; user data lives in storage and survives.
+  let crashed: string | null = null;
+  function onCrash(e: Event): void {
+    crashed = String((e as ErrorEvent).message ?? "unknown error");
+    console.error("SOS crash:", e);
+  }
+  function recover(): void {
+    crashed = null;
+    window.location.reload();
+  }
 </script>
 
+<svelte:window on:error={onCrash} />
+
 <div class="h-full flex flex-col">
+  {#if crashed}
+    <div class="fixed inset-0 z-[200] bg-white dark:bg-[#1f1f1f] grid place-items-center p-8">
+      <div class="card max-w-md p-6 text-center">
+        <div class="text-4xl mb-3">🛠️</div>
+        <h2 class="font-semibold text-lg mb-1">Something went wrong</h2>
+        <p class="text-sm text-gray-500 mb-1">Your files are safe — everything is stored locally.</p>
+        <p class="text-[11px] font-mono text-gray-400 mb-4 break-all max-h-20 overflow-y-auto">{crashed}</p>
+        <div class="flex gap-2 justify-center">
+          <button class="btn btn-ghost text-xs" on:click={() => { crashed = null; }}>Dismiss</button>
+          <button class="btn btn-primary text-xs" on:click={recover}>Reload app</button>
+        </div>
+      </div>
+    </div>
+  {:else}
   <Header onNew={handleNew} on:settings={() => (settingsOpen = true)} />
 
   <div class="flex-1 flex min-h-0">
@@ -184,5 +212,6 @@
 
   {#if settingsOpen}
     <SettingsModal on:close={() => (settingsOpen = false)} />
+  {/if}
   {/if}
 </div>

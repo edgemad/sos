@@ -274,7 +274,7 @@
       // Help
       case "help:shortcuts": dialog = "shortcuts"; return;
       case "help:search": dialog = "replace"; return;
-      case "help:about": alert("Simple Office Suite v1.2.0 — offline-first, MIT licensed."); return;
+      case "help:about": alert("Simple Office Suite v1.3.0 — offline-first, MIT licensed."); return;
       // Canvas-only / passthrough
       case "print": doExport("pdf"); return;
       case "paintFormat": canvasApi?.exec("sos:paint-get"); return;

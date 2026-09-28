@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { evaluateCell, colToName, nameToCol, cellKey, referencedCells } from "../formula";
-import type { SheetTab } from "../../types";
+import type { SheetData, SheetTab } from "../../types";
 
 function tabWith(cells: Record<string, string>): SheetTab {
   return { name: "T", rows: 50, cols: 20, cells };
@@ -139,5 +139,78 @@ describe("helpers", () => {
   it("expands referenced cells", () => {
     expect(referencedCells("=SUM(A1:B2)")).toEqual(["A1", "B1", "A2", "B2"]);
     expect(referencedCells("=A1+Z9")).toContain("A1");
+  });
+});
+
+describe("cross-sheet references", () => {
+  const workbook: SheetData = {
+    activeSheet: 0,
+    sheets: [
+      tabWith({ A1: "=Data!B2 * 2", B1: "=SUM(Data!A1:A3)" }),
+      { name: "Data", rows: 50, cols: 20, cells: { A1: "1", A2: "2", A3: "3", B2: "21" } }
+    ]
+  };
+
+  it("evaluates cross-sheet cell refs", () => {
+    expect(evaluateCell(workbook.sheets[0], "A1", workbook)).toBe(42);
+  });
+
+  it("evaluates cross-sheet ranges", () => {
+    expect(evaluateCell(workbook.sheets[0], "B1", workbook)).toBe(6);
+  });
+
+  it("missing sheets give #REF!", () => {
+    const t = tabWith({ A1: "=Nope!B2" });
+    expect(evaluateCell(t, "A1", workbook)).toBe("#REF!");
+  });
+});
+
+describe("named ranges", () => {
+  const t = tabWith({ A1: "1", A2: "2", A3: "3", C1: "=SUM(Sales)", C2: "=Sales" });
+  const names = { SALES: "A1:A3" };
+
+  it("resolves names in functions", () => {
+    expect(evaluateCell(t, "C1", null, names)).toBe(6);
+  });
+
+  it("resolves names as plain refs", () => {
+    expect(evaluateCell(t, "C2", null, names)).toBe(1);
+  });
+
+  it("unknown names stay #NAME? via ref check", () => {
+    expect(evaluateCell(tabWith({ C1: "=Nope" }), "C1", null, {})).toBe("#NAME?");
+  });
+});
+
+describe("lookup functions", () => {
+  // Table at A1:B3:  alpha 10 / beta 20 / gamma 30
+  const cells = { A1: "alpha", B1: "10", A2: "beta", B2: "20", A3: "gamma", B3: "30" };
+
+  it("VLOOKUP finds by first column", () => {
+    expect(evalOf('=VLOOKUP("beta", A1:B3, 2)', cells)).toBe(20);
+    expect(evalOf('=VLOOKUP("GAMMA", A1:B3, 2)', cells)).toBe(30); // case-insensitive
+  });
+
+  it("VLOOKUP misses give #N/A", () => {
+    expect(evalOf('=VLOOKUP("nope", A1:B3, 2)', cells)).toBe("#N/A");
+  });
+
+  it("HLOOKUP finds by first row", () => {
+    const grid = { A1: "q1", A2: "100", B1: "q2", B2: "200" };
+    expect(evalOf('=HLOOKUP("q2", A1:B2, 2)', grid)).toBe(200);
+  });
+
+  it("INDEX + MATCH compose", () => {
+    expect(evalOf('=INDEX(B1:B3, MATCH("gamma", A1:A3))', cells)).toBe(30);
+    expect(evalOf('=MATCH("beta", A1:A3)', cells)).toBe(2);
+  });
+
+  it("SUMPRODUCT multiplies element-wise", () => {
+    const qty = { A1: "2", A2: "3", B1: "10", B2: "20" };
+    expect(evalOf("=SUMPRODUCT(A1:A2, B1:B2)", qty)).toBe(80);
+  });
+
+  it("COUNTBLANK counts empties", () => {
+    expect(evalOf("=COUNTBLANK(A1:A3)", { A2: "x" })).toBe(2);
   });
 });
