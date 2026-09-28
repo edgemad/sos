@@ -122,6 +122,7 @@
   <span class="tbsep" />
 
   <button class="tb" title="Insert function (Σ)" on:click={() => fire("fn", "SUM")}>Σ</button>
+  <button class="tb" title="Insert chart" on:click={() => fire("insert:chart")}>📊</button>
   <button class="tb" title="Create filter" on:click={() => fire("data:filter")}>⧩</button>
 
   <style>

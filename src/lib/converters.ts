@@ -27,7 +27,7 @@ export function importFilterFor(kind: FileKind): string {
 
 // ── DOCX (Word) ─────────────────────────────────────────────────
 
-export function exportDocx(title: string, bodyHtml: string): void {
+export function buildDocxZip(title: string, bodyHtml: string): Uint8Array {
   // Convert the editor HTML to a simple OOXML paragraph run list.
   const tpl = document.createElement("template");
   tpl.innerHTML = bodyHtml;
@@ -83,7 +83,11 @@ ${paras.join("\n")}
 </Relationships>`) },
     { name: "word/document.xml", data: str(documentXml) }
   ]);
-  downloadBinary(`${safe(title)}.docx`, zip, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  return zip;
+}
+
+export function exportDocx(title: string, bodyHtml: string): void {
+  downloadBinary(`${safe(title)}.docx`, buildDocxZip(title, bodyHtml), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 }
 
 function str(s: string): Uint8Array {
@@ -146,7 +150,7 @@ function stripXmlTags(xml: string, keep: string[] = []): string {
 
 // ── ODT (OpenDocument Text) ─────────────────────────────────────
 
-export function exportOdt(title: string, bodyHtml: string): void {
+export function buildOdtZip(title: string, bodyHtml: string): Uint8Array {
   const tpl = document.createElement("template");
   tpl.innerHTML = bodyHtml;
   const blocks: string[] = [];
@@ -196,7 +200,11 @@ ${blocks.join("\n")}
 </manifest:manifest>`) },
     { name: "content.xml", data: str(contentXml) }
   ]);
-  downloadBinary(`${safe(title)}.odt`, zip, "application/vnd.oasis.opendocument.text");
+  return zip;
+}
+
+export function exportOdt(title: string, bodyHtml: string): void {
+  downloadBinary(`${safe(title)}.odt`, buildOdtZip(title, bodyHtml), "application/vnd.oasis.opendocument.text");
 }
 
 export async function importOdt(bytes: Uint8Array): Promise<string> {
@@ -230,13 +238,26 @@ export function importRtf(rtf: string): string {
   // Paragraph and line breaks
   t = t.replace(/\\par[d]?\b/g, "\n");
   t = t.replace(/\\line\b/g, "\n");
+  // Bold / italic toggles -> private-use markers so they survive esc() below
+  // (the space after a control word is its delimiter, so consume it too)
+  t = t.replace(/\\b0 /g, "\u0005").replace(/\\b0(?=[\\{}])/g, "\u0005");
+  t = t.replace(/\\b /g, "\u0004").replace(/\\b(?=[\\{}])/g, "\u0004");
+  t = t.replace(/\\i0 /g, "\u0007").replace(/\\i0(?=[\\{}])/g, "\u0007");
+  t = t.replace(/\\i /g, "\u0006").replace(/\\i(?=[\\{}])/g, "\u0006");
   // Remaining control words (with optional numeric parameter) and braces
   t = t.replace(/\\[a-zA-Z]+-?\d* ?/g, "");
   t = t.replace(/[{}]/g, "");
   t = t.replace(/\u0001/g, "\\").replace(/\u0002/g, "{").replace(/\u0003/g, "}");
   return t
     .split(/\n{2,}/)
-    .map((p) => `<p>${esc(p.trim()).replace(/\n/g, "<br>")}</p>`)
+    .map((p) =>
+      `<p>${esc(p.trim())
+        .replace(/\n/g, "<br>")
+        .replace(/\u0004/g, "<b>")
+        .replace(/\u0005/g, "</b>")
+        .replace(/\u0006/g, "<i>")
+        .replace(/\u0007/g, "</i>")}</p>`
+    )
     .filter((p) => p !== "<p></p>")
     .join("\n");
 }
@@ -297,8 +318,12 @@ export function importHtmlFile(html: string): string {
   const tpl = document.createElement("template");
   tpl.innerHTML = html;
   tpl.content.querySelectorAll("script,style,meta,link,title").forEach((n) => n.remove());
-  const body = tpl.content.querySelector("body") ?? tpl.content;
-  return (body as HTMLElement).innerHTML.replace(/\son\w+="[^"]*"/gi, "").trim();
+  // innerHTML only exists on elements, so move nodes into a host div first
+  // (works whether or not the parsed fragment kept a <body> element).
+  const src = tpl.content.querySelector("body") ?? tpl.content;
+  const host = document.createElement("div");
+  while (src.firstChild) host.appendChild(src.firstChild);
+  return host.innerHTML.replace(/\son\w+="[^"]*"/gi, "").trim();
 }
 
 // ── Spreadsheets: XLSX / ODS / CSV / TSV / JSON ────────────────
@@ -308,7 +333,7 @@ export interface SheetGrid {
   rows: string[][];
 }
 
-export function exportXlsx(name: string, grids: SheetGrid[]): void {
+export function buildXlsxZip(name: string, grids: SheetGrid[]): Uint8Array {
   const sheetXml = (rows: string[][]): string => {
     const body = rows.map((row, r) => {
       const cells = row.map((v, c) => {
@@ -348,7 +373,11 @@ ${grids.map((_g, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
   ];
   grids.forEach((g, i) => entries.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: str(sheetXml(g.rows)) }));
 
-  downloadBinary(`${safe(name)}.xlsx`, zipSync(entries), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  return zipSync(entries);
+}
+
+export function exportXlsx(name: string, grids: SheetGrid[]): void {
+  downloadBinary(`${safe(name)}.xlsx`, buildXlsxZip(name, grids), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 }
 
 export async function importXlsx(bytes: Uint8Array): Promise<SheetGrid[]> {
@@ -405,7 +434,7 @@ function decodeXmlEntities(s: string): string {
   return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 
-export function exportOds(name: string, grids: SheetGrid[]): void {
+export function buildOdsZip(name: string, grids: SheetGrid[]): Uint8Array {
   const sheetsXml = grids.map((g) => {
     const rows = g.rows.map((row) => {
       const cells = row.map((v) => {
@@ -435,7 +464,11 @@ export function exportOds(name: string, grids: SheetGrid[]): void {
 </manifest:manifest>`) },
     { name: "content.xml", data: str(contentXml) }
   ]);
-  downloadBinary(`${safe(name)}.ods`, zip, "application/vnd.oasis.opendocument.spreadsheet");
+  return zip;
+}
+
+export function exportOds(name: string, grids: SheetGrid[]): void {
+  downloadBinary(`${safe(name)}.ods`, buildOdsZip(name, grids), "application/vnd.oasis.opendocument.spreadsheet");
 }
 
 export async function importOds(bytes: Uint8Array): Promise<SheetGrid[]> {

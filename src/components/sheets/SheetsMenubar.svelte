@@ -75,6 +75,7 @@
         { id: "insert:dropdown", label: "Dropdown…" },
         { id: "insert:note", label: "Note…", hint: "⇧F2" },
         { id: "insert:function", label: "Function · Σ SUM" },
+        { id: "insert:chart", label: "Chart…" },
         { id: "insert:link", label: "Link…" },
         { id: "s2", label: "", sep: true },
         { id: "insert:emoji", label: "Emoji…" },

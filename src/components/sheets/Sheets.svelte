@@ -6,7 +6,7 @@
   import { openFile, updateContent } from "../../lib/state";
   import { evaluateCell, displayValue, cellKey, colToName, ERROR } from "../../lib/formula";
   import type { CellValue } from "../../lib/formula";
-  import type { SheetData, SheetTab, CellMeta } from "../../types";
+  import type { SheetData, SheetTab, CellMeta, SheetChart } from "../../types";
   import { suggestFunctions } from "../../lib/formulaCatalog";
   import { toCsv, parseCsv as csvParse, download, escapeHtml } from "../../lib/utils";
   import { saveFileDialog } from "../../lib/tauri";
@@ -14,6 +14,28 @@
   import SheetsMenubar from "./SheetsMenubar.svelte";
   import SheetsToolbar from "./SheetsToolbar.svelte";
   import TransferModal from "../layout/TransferModal.svelte";
+  import SheetChartView from "./SheetChart.svelte";
+  import ChartModal from "./ChartModal.svelte";
+  import { commitSheets, sheetsUndo, sheetsRedo, resetSheetsHistory, setSheetsHistoryEnabled } from "../../lib/sheetHistory";
+  import { uid } from "../../lib/utils";
+  import { isMod } from "../../lib/shortcuts";
+
+  onDestroy(() => {
+    setSheetsHistoryEnabled(false);
+    window.removeEventListener("mousemove", onChartDrag);
+  });
+  // Scope the history engine to the open spreadsheet; reset only when the
+  // FILE changes (not on every content update, which would erase undo history).
+  let scopedFileId: string | null = null;
+  $: if (file && file.kind === "spreadsheet" && data) {
+    setSheetsHistoryEnabled(true);
+    if (scopedFileId !== file.id) {
+      scopedFileId = file.id;
+      resetSheetsHistory();
+    }
+  } else {
+    setSheetsHistoryEnabled(false);
+  }
 
   $: file = $openFile;
   $: data = file && file.kind === "spreadsheet" ? (file.content as SheetData) : null;
@@ -65,13 +87,23 @@
   let formulaInput: HTMLInputElement;
   let gridZoom = 100;
 
+  // Selected rectangular range (drag or shift-click) — used by charts.
+  let selRange: { r0: number; r1: number; c0: number; c1: number } | null = null;
+  let rangeStart: { row: number; col: number } | null = null;
+
+  // Chart card drag state
+  let draggingChart: string | null = null;
+  let dragOffX = 0;
+  let dragOffY = 0;
+  let chartDraft = "";
+
   // Suggestions
   let suggestions: ReturnType<typeof suggestFunctions> = [];
   let suggestionIndex = 0;
   let showSuggestions = false;
 
   // Dialogs
-  let dialog: null | "find" | "dropdown" | "note" | "stats" | "validate" | "emoji" | "named" | "shortcuts" | "fnlist" | "details" | "protect" = null;
+  let dialog: null | "find" | "dropdown" | "note" | "stats" | "validate" | "emoji" | "named" | "shortcuts" | "fnlist" | "details" | "protect" | "chart" = null;
 
   // ── Import / Export (consistent with Docs & Slides) ────────────
   let transfer: null | "import" | "export" = null;
@@ -154,7 +186,7 @@
         g.rows.forEach((row, r) => row.forEach((v, c) => { if (v !== "") cells[cellKey(r, c)] = v; }));
         return { name: g.name || "Sheet1", rows: Math.max(60, g.rows.length), cols, cells, meta: {} };
       });
-      updateContent(file.id, { sheets, activeSheet: 0 });
+      commitSheets(file.id, { ...data, sheets, activeSheet: 0 });
     } catch (err) {
       alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -227,7 +259,7 @@
     if (Object.values(metas[key] as Record<string, unknown>).every((v) => v === undefined)) delete metas[key];
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, meta: metas };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   /** Apply a value to a cell keeping the current meta (b/i/fmt persist). */
@@ -240,7 +272,7 @@
     else cells[key] = v;
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function startEdit(initial?: string, inGrid = true): void {
@@ -373,6 +405,11 @@
       return;
     }
     if (editing) stopEdit(true);
+    if (e.shiftKey) {
+      if (!rangeStart) rangeStart = { row: selRow, col: selCol };
+    } else {
+      rangeStart = null;
+    }
     selRow = r;
     selCol = c;
   }
@@ -484,7 +521,7 @@
       rows: kind === "row" ? tab.rows + 1 : tab.rows,
       cols: kind === "col" ? tab.cols + 1 : tab.cols
     };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function nameToColNum(name: string): number {
@@ -530,7 +567,7 @@
       rows: kind === "row" ? Math.max(1, tab.rows - 1) : tab.rows,
       cols: kind === "col" ? Math.max(1, tab.cols - 1) : tab.cols
     };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   // ── Data tools ──────────────────────────────────────────────────
@@ -567,7 +604,7 @@
     }
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function toggleFilter(): void {
@@ -575,7 +612,7 @@
     const on = tab.filterCol === null || tab.filterCol === undefined;
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, filterCol: on ? selCol : null, filterText: on ? "" : undefined };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   $: filteredRows = (() => {
@@ -596,7 +633,7 @@
     }
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
     alert(`Trimmed whitespace in ${n} cell(s).`);
   }
 
@@ -624,7 +661,7 @@
     }
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
     alert(`Removed ${drop.size} duplicate row(s).`);
   }
 
@@ -640,7 +677,7 @@
     });
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells, cols: Math.max(tab.cols, selCol + parts.length) };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function columnStats(): void {
@@ -673,7 +710,7 @@
       frozenRows: kind === "row" ? 1 : 0,
       frozenCols: kind === "col" ? 1 : 0
     };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   // ── Sheets (tabs) management ────────────────────────────────────
@@ -681,7 +718,7 @@
   function addSheet(): void {
     if (!file || !data) return;
     const sheets = [...data.sheets, { name: `Sheet${data.sheets.length + 1}`, rows: 60, cols: 18, cells: {} }];
-    updateContent(file.id, { ...data, sheets, activeSheet: sheets.length - 1 });
+    commitSheets(file.id, { ...data, sheets, activeSheet: sheets.length - 1 });
   }
 
   function selectSheet(i: number): void {
@@ -705,7 +742,7 @@
     const copy = { ...src, name: `Copy of ${src.name}`, cells: { ...src.cells }, meta: src.meta ? { ...src.meta } : undefined };
     const sheets = [...data.sheets];
     sheets.splice(i + 1, 0, copy);
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function hideSheet(i: number): void {
@@ -723,8 +760,9 @@
 
   function deleteSheet(i: number): void {
     if (!file || !data || data.sheets.length <= 1) return;
+    if (!confirm(`Delete sheet "${data.sheets[i].name}"? You can undo with ⌘Z.`)) return;
     const sheets = data.sheets.filter((_, k) => k !== i);
-    updateContent(file.id, { ...data, sheets, activeSheet: Math.max(0, Math.min(data.activeSheet, sheets.length - 1)) });
+    commitSheets(file.id, { ...data, sheets, activeSheet: Math.max(0, Math.min(data.activeSheet, sheets.length - 1)) });
   }
 
   // ── Import / export / save ──────────────────────────────────────
@@ -796,8 +834,8 @@
       case "size": break; // per-cell font size omitted for lightness
       case "print": printSheet(); break;
       case "paint": break;
-      case "undo": document.execCommand("undo"); break;
-      case "redo": document.execCommand("redo"); break;
+      case "undo": if (!sheetsUndo()) document.execCommand("undo"); break;
+      case "redo": if (!sheetsRedo()) document.execCommand("redo"); break;
       case "data:filter": toggleFilter(); break;
       default:
         // Full-id commands (menu items)
@@ -819,8 +857,8 @@
       case "file:details": dialog = "details"; break;
       case "file:trash": if (file) import("../../lib/state").then((m) => m.trashFile(file.id)); break;
       case "file:print": printSheet(); break;
-      case "undo": document.execCommand("undo"); break;
-      case "redo": document.execCommand("redo"); break;
+      case "undo": if (!sheetsUndo()) document.execCommand("undo"); break;
+      case "redo": if (!sheetsRedo()) document.execCommand("redo"); break;
       case "edit:find": dialog = "find"; break;
       case "edit:fill-down": fillDown(); break;
       case "edit:fill-right": fillRight(); break;
@@ -841,6 +879,12 @@
       case "insert:dropdown": ddOptions = metaOf(cellKey(selRow, selCol)).dropdown?.join(", ") ?? ""; dialog = "dropdown"; break;
       case "insert:note": noteText = metaOf(cellKey(selRow, selCol)).note ?? ""; dialog = "note"; break;
       case "insert:function": insertFunction("SUM"); break;
+      case "insert:chart":
+        chartDraft = selRange
+          ? `${cellKey(selRange.r0, selRange.c0)}:${cellKey(selRange.r1, selRange.c1)}`
+          : "";
+        dialog = "chart";
+        break;
       case "insert:link": { const url = prompt("Link URL:"); if (url) patchMeta({ note: url }); break; }
       case "insert:emoji": emojiTarget = "cell"; dialog = "emoji"; break;
       case "insert:date": { editValue = new Date().toLocaleDateString(); commit(); break; }
@@ -875,7 +919,7 @@
       case "help:search": dialog = "find"; break;
       case "help:fnlist": dialog = "fnlist"; break;
       case "help:shortcuts": dialog = "shortcuts"; break;
-      case "help:about": alert("Simple Office Suite v1.1.0 — offline-first, MIT licensed."); break;
+      case "help:about": alert("Simple Office Suite v1.2.0 — offline-first, MIT licensed."); break;
     }
   }
 
@@ -886,7 +930,7 @@
     if (src !== undefined) cells[cellKey(selRow, selCol)] = src;
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function fillRight(): void {
@@ -896,7 +940,7 @@
     if (src !== undefined) cells[cellKey(selRow, selCol)] = src;
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
   }
 
   function findNextCell(): void {
@@ -922,12 +966,18 @@
     }
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
     alert(`Replaced in ${n} cell(s).`);
   }
 
   $: selKey = cellKey(selRow, selCol);
   $: selRaw = tab?.cells[selKey] ?? "";
+  $: selRange = rangeStart
+    ? {
+        r0: Math.min(rangeStart.row, selRow), r1: Math.max(rangeStart.row, selRow),
+        c0: Math.min(rangeStart.col, selCol), c1: Math.max(rangeStart.col, selCol)
+      }
+    : null;
 
   function checkboxVal(e: Event): boolean {
     return (e.currentTarget as HTMLInputElement).checked;
@@ -944,7 +994,141 @@
     else cells[key] = v;
     const sheets = [...data.sheets];
     sheets[data.activeSheet] = { ...tab, cells };
-    updateContent(file.id, { ...data, sheets });
+    commitSheets(file.id, { ...data, sheets });
+  }
+
+  // ── Charts ──────────────────────────────────────────────────────
+
+  function parseRangeText(text: string): SheetChart["range"] | null {
+    const norm = text.trim().toUpperCase().replace(/\$/g, "");
+    const m = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(norm);
+    if (!m) return null;
+    const cA = nameToColNum(m[1]);
+    const rA = parseInt(m[2], 10) - 1;
+    const cB = m[3] ? nameToColNum(m[3]) : cA;
+    const rB = m[4] ? parseInt(m[4], 10) - 1 : rA;
+    return { r0: Math.min(rA, rB), r1: Math.max(rA, rB), c0: Math.min(cA, cB), c1: Math.max(cA, cB) };
+  }
+
+  function addChart(kind: string, range: string, title: string): void {
+    if (!file || !data || !tab) return;
+    const parsed = parseRangeText(range);
+    if (!parsed) {
+      alert("Invalid range — use a rectangle like A1:B5.");
+      return;
+    }
+    const chart: SheetChart = {
+      id: uid(),
+      kind: kind as SheetChart["kind"],
+      range: parsed,
+      title: title || "Chart",
+      anchor: { row: Math.min(Math.max(0, selRow + 1), Math.max(0, tab.rows - 8)), col: 2 }
+    };
+    const sheets = [...data.sheets];
+    sheets[data.activeSheet] = { ...tab, charts: [...(tab.charts ?? []), chart] };
+    commitSheets(file.id, { ...data, sheets });
+    dialog = null;
+  }
+
+  function removeChart(id: string): void {
+    if (!file || !data || !tab) return;
+    const sheets = [...data.sheets];
+    sheets[data.activeSheet] = { ...tab, charts: (tab.charts ?? []).filter((ch) => ch.id !== id) };
+    commitSheets(file.id, { ...data, sheets });
+  }
+
+  const CHART_COLORS = ["#4285f4", "#ea4335", "#fbbc05", "#34a853", "#a142f4", "#24c1e0"];
+
+  interface ChartSeries {
+    name: string;
+    color: string;
+    values: number[];
+  }
+
+  /** Extract labels + numeric series from the sheet for a chart range. */
+  function chartData(rng: SheetChart["range"]): { labels: string[]; series: ChartSeries[] } {
+    if (!tab) return { labels: [], series: [] };
+    const disp = (r: number, c: number): string => display[cellKey(r, c)] ?? tab!.cells[cellKey(r, c)] ?? "";
+    const numOf = (s: string): number => {
+      const n = parseFloat(s.replace(/[$,%\s]/g, ""));
+      return Number.isNaN(n) ? 0 : n;
+    };
+    const isNum = (s: string): boolean => s !== "" && !Number.isNaN(parseFloat(s.replace(/[$,%\s]/g, "")));
+
+    // Label column: when the first column is mostly non-numeric text (and
+    // another column exists), treat it as category labels.
+    let labelCol = -1;
+    let firstDataCol = rng.c0;
+    if (rng.c1 > rng.c0) {
+      let nonNum = 0;
+      let num = 0;
+      for (let r = rng.r0; r <= rng.r1; r++) {
+        const v = disp(r, rng.c0);
+        if (v === "") continue;
+        if (isNum(v)) num++;
+        else nonNum++;
+      }
+      if (nonNum > num) {
+        labelCol = rng.c0;
+        firstDataCol = rng.c0 + 1;
+      }
+    }
+
+    // Header row: when the first data column's top cell is non-numeric text.
+    let headerRow = -1;
+    let firstDataRow = rng.r0;
+    const topLeft = disp(rng.r0, firstDataCol);
+    if (rng.r1 > rng.r0 && topLeft !== "" && !isNum(topLeft)) {
+      headerRow = rng.r0;
+      firstDataRow = rng.r0 + 1;
+    }
+
+    const labels: string[] = [];
+    for (let r = firstDataRow; r <= rng.r1; r++) {
+      labels.push(labelCol >= 0 ? disp(r, labelCol) || String(r + 1) : String(r + 1));
+    }
+
+    const series: ChartSeries[] = [];
+    for (let c = firstDataCol; c <= rng.c1; c++) {
+      series.push({
+        name: headerRow >= 0 ? disp(headerRow, c) || colToName(c) : colToName(c),
+        color: CHART_COLORS[series.length % CHART_COLORS.length],
+        values: labels.map((_, i) => numOf(disp(firstDataRow + i, c)))
+      });
+    }
+    return { labels, series };
+  }
+
+  function chartX(e: MouseEvent): number {
+    return e.clientX - container.getBoundingClientRect().left + container.scrollLeft;
+  }
+
+  function chartY(e: MouseEvent): number {
+    return e.clientY - container.getBoundingClientRect().top + container.scrollTop;
+  }
+
+  function startChartDrag(e: MouseEvent, ch: SheetChart): void {
+    draggingChart = ch.id;
+    dragOffX = chartX(e) - (64 + ch.anchor.col * COL_W);
+    dragOffY = chartY(e) - (HEAD_H + ch.anchor.row * ROW_H);
+    window.addEventListener("mousemove", onChartDrag);
+    window.addEventListener("mouseup", endChartDrag, { once: true });
+  }
+
+  function onChartDrag(e: MouseEvent): void {
+    if (!draggingChart || !file || !data || !tab) return;
+    const col = Math.max(0, Math.round((chartX(e) - dragOffX - 64) / COL_W));
+    const row = Math.max(0, Math.round((chartY(e) - dragOffY - HEAD_H) / ROW_H));
+    const charts = (tab.charts ?? []).map((c) => (c.id === draggingChart ? { ...c, anchor: { row, col } } : c));
+    const sheets = [...data.sheets];
+    sheets[data.activeSheet] = { ...tab, charts };
+    updateContent(file.id, { ...data, sheets }); // view-state drag: bypasses undo history
+  }
+
+  function endChartDrag(): void {
+    draggingChart = null;
+    window.removeEventListener("mousemove", onChartDrag);
+    window.removeEventListener("mouseup", endChartDrag);
   }
 
   function sheetAction(e: Event): void {
@@ -966,15 +1150,29 @@
     lastCmdAt = t;
     onCommand((e as CustomEvent<{ cmd: string; payload?: string }>).detail);
   }
+  function onUndoRequest(): void {
+    if (!sheetsUndo()) document.execCommand("undo");
+  }
+  function onRedoRequest(): void {
+    if (!sheetsRedo()) document.execCommand("redo");
+  }
   // Re-register whenever the component's reactive scope re-runs; idempotent because
   // addEventListener deduplicates identical function references.
   $: bridgeRef = registerBridge();
   function registerBridge(): number {
     window.removeEventListener("sos-cmd-sheets", onWindowCmd);
     window.addEventListener("sos-cmd-sheets", onWindowCmd);
+    window.removeEventListener("sos:undo-request", onUndoRequest);
+    window.addEventListener("sos:undo-request", onUndoRequest);
+    window.removeEventListener("sos:redo-request", onRedoRequest);
+    window.addEventListener("sos:redo-request", onRedoRequest);
     return 1;
   }
-  onDestroy(() => window.removeEventListener("sos-cmd-sheets", onWindowCmd));
+  onDestroy(() => {
+    window.removeEventListener("sos-cmd-sheets", onWindowCmd);
+    window.removeEventListener("sos:undo-request", onUndoRequest);
+    window.removeEventListener("sos:redo-request", onRedoRequest);
+  });
 </script>
 
 <div class="flex-1 flex flex-col min-h-0 relative" role="grid" tabindex="0" on:keydown={onGridKeydown}>
@@ -1097,6 +1295,35 @@
         </div>
       </div>
     {/if}
+
+    <!-- Selection range outline (drag / shift-click) -->
+    {#if tab && selRange && (selRange.r1 > selRange.r0 || selRange.c1 > selRange.c0)}
+      <div
+        class="absolute pointer-events-none border-2 border-docs bg-blue-500/5 rounded-sm z-10"
+        style={`left:${64 + selRange.c0 * COL_W}px; top:${selRange.r0 * ROW_H}px; width:${(selRange.c1 - selRange.c0 + 1) * COL_W}px; height:${(selRange.r1 - selRange.r0 + 1) * ROW_H}px`}
+      />
+    {/if}
+
+    <!-- Floating charts -->
+    {#if tab}
+      {#each tab.charts ?? [] as ch (ch.id)}
+        {@const cd = chartData(ch.range)}
+        <div
+          class="absolute z-30 card !p-2 shadow-modal cursor-move group"
+          style={`left:${64 + ch.anchor.col * COL_W}px; top:${HEAD_H + ch.anchor.row * ROW_H}px; width:${ch.w ?? 340}px; height:${ch.h ?? 240}px;`}
+          on:mousedown={(e) => startChartDrag(e, ch)}
+          title="Drag to move"
+        >
+          <button
+            class="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full bg-gray-700 text-white text-[10px] leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Remove chart"
+            on:mousedown|stopPropagation
+            on:click|stopPropagation={() => removeChart(ch.id)}
+          >✕</button>
+          <SheetChartView kind={ch.kind} labels={cd.labels} series={cd.series} title={ch.title} w={ch.w ?? 340} h={ch.h ?? 240} />
+        </div>
+      {/each}
+    {/if}
   </div>
 
   <!-- Floating formula editor for cell edits -->
@@ -1143,7 +1370,7 @@
   {/if}
 
   <!-- Dialogs -->
-  {#if dialog}
+  {#if dialog && dialog !== "chart"}
     <div class="fixed inset-0 z-[70] bg-black/40 grid place-items-center" on:click|self={() => (dialog = null)}>
       <div class="card w-[440px] max-w-[92vw] p-5 shadow-modal" on:click|stopPropagation>
         {#if dialog === "find"}
@@ -1225,6 +1452,18 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if dialog === "chart"}
+    <ChartModal
+      initialRange={chartDraft}
+      getData={(rangeText) => {
+        const p = parseRangeText(rangeText);
+        return p ? chartData(p) : { labels: [], series: [] };
+      }}
+      on:create={(e) => addChart(e.detail.kind, e.detail.range, e.detail.title)}
+      on:close={() => (dialog = null)}
+    />
   {/if}
 
   {#if transfer}

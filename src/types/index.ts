@@ -80,6 +80,20 @@ export interface SheetData {
   activeSheet: number;
 }
 
+/** A chart rendered as an overlay on the grid, computed from a cell range. */
+export interface SheetChart {
+  id: string;
+  kind: "bar" | "line" | "pie";
+  /** Source range (inclusive, 0-based). */
+  range: { r0: number; r1: number; c0: number; c1: number };
+  title: string;
+  /** Top-left anchor cell of the floating chart card. */
+  anchor: { row: number; col: number };
+  /** Card size in px (defaults 320×230). */
+  w?: number;
+  h?: number;
+}
+
 export interface SheetTab {
   name: string;
   rows: number;
@@ -91,6 +105,8 @@ export interface SheetTab {
   hidden?: boolean;
   filterCol?: number | null; // simple column filter text
   filterText?: string;
+  /** Charts attached to this tab. */
+  charts?: SheetChart[];
 }
 
 // ── Slides ──────────────────────────────────────────────────────

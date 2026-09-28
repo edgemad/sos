@@ -648,13 +648,23 @@
     lastCmdAt = t;
     onCommand((e as CustomEvent<{ cmd: string; payload?: string }>).detail);
   }
+  function onUndoRequest(): void { undo(); }
+  function onRedoRequest(): void { redo(); }
   $: bridgeRef = registerBridge();
   function registerBridge(): number {
     window.removeEventListener("sos-cmd-slides", onWindowCmd);
     window.addEventListener("sos-cmd-slides", onWindowCmd);
+    window.removeEventListener("sos:undo-request", onUndoRequest);
+    window.addEventListener("sos:undo-request", onUndoRequest);
+    window.removeEventListener("sos:redo-request", onRedoRequest);
+    window.addEventListener("sos:redo-request", onRedoRequest);
     return 1;
   }
-  onDestroy(() => window.removeEventListener("sos-cmd-slides", onWindowCmd));
+  onDestroy(() => {
+    window.removeEventListener("sos-cmd-slides", onWindowCmd);
+    window.removeEventListener("sos:undo-request", onUndoRequest);
+    window.removeEventListener("sos:redo-request", onRedoRequest);
+  });
 </script>
 
 <div class="flex-1 flex min-h-0">

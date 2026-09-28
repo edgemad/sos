@@ -93,6 +93,14 @@
       else if (matches(e, "mod+s")) { e.preventDefault(); void saveCurrentToDisk(); }
       else if (matches(e, "mod+p")) { e.preventDefault(); exportCurrentPdf(); }
       else if (matches(e, "mod+o")) { e.preventDefault(); window.dispatchEvent(new CustomEvent("sos:open-request")); }
+      else if (matches(e, "mod+shift+z") || matches(e, "mod+y")) { e.preventDefault(); window.dispatchEvent(new CustomEvent("sos:redo-request")); }
+      else if (matches(e, "mod+z")) {
+        // Let contenteditable/inputs keep their native undo (Writer, text fields);
+        // route everything else to the focused module's history engine.
+        const ae = document.activeElement as HTMLElement | null;
+        const nativeEditable = !!ae && (ae.isContentEditable || ae.tagName === "INPUT" || ae.tagName === "TEXTAREA");
+        if (!nativeEditable) { e.preventDefault(); window.dispatchEvent(new CustomEvent("sos:undo-request")); }
+      }
       else if (matches(e, "mod+shift+c")) { e.preventDefault(); window.dispatchEvent(new CustomEvent("sos:wordcount-request")); }
       else if (matches(e, "mod+alt+d")) { e.preventDefault(); document.documentElement.classList.toggle("dark"); }
       else if (matches(e, "mod+f")) { e.preventDefault(); findOpen = true; window.dispatchEvent(new CustomEvent("sos:find-request")); }

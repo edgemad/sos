@@ -17,7 +17,7 @@ Documents · Spreadsheets · Presentations · Forms · Notes · Calendar — zer
 | 🏠 **Home (Drive)** | Template gallery, search, list/grid views, star, recolor, trash/restore, recents |
 | 🎀 **Ribbon UI** | Office-style tabbed function ribbon in every editor — context tabs per module, collapsible, grouped commands |
 | 📄 **Docs** | Rich text WYSIWYG editor with Home (undo/redo, font styles, colors, lists, alignment) and Insert (tables, links, rules) ribbon tabs, A4 page canvas, auto-save, word count, PDF/Markdown/plaintext export |
-| 📊 **Sheets** | Virtualized grid, ribbon quick-functions (`Σ SUM`, `x̄ AVG`, `COUNT`, `MIN`, `MAX` one-click wraps), full Formulas tab (math + logic + text), Go-to-cell navigation, CSV import/export, multi-tab workbooks, live SUM/COUNT/AVG stats |
+| 📊 **Sheets** | Virtualized grid, ribbon quick-functions (`Σ SUM`, `x̄ AVG`, `COUNT`, `MIN`, `MAX` one-click wraps), full Formulas tab (math + logic + text), Go-to-cell navigation, CSV import/export, multi-tab workbooks, live SUM/COUNT/AVG stats, **floating charts** (bar / line / pie over any range) and **full undo/redo** (⌘Z / ⌘Y) across cell edits, sorts, fills, row/column and tab operations |
 | 🖼️ **Slides** | 16:9 canvas, ribbon block insertion (title/text/shape/code/image), arrange (front/back), Design tab with background palette, deck sidebar, **fullscreen presenter view with stopwatch & speaker notes** |
 | 📝 **Forms** | Question builder (short/paragraph/multiple-choice/checkbox/linear scale), live preview, response tallying with bar charts |
 | 🗒️ **Keep** | Colored notes, pinning, checklists, search |
@@ -25,6 +25,18 @@ Documents · Spreadsheets · Presentations · Forms · Notes · Calendar — zer
 | ⌨️ **Everywhere** | Command palette (`Ctrl/Cmd+K`), dark mode, debounced auto-save, status bar with system telemetry |
 
 Everything is stored **locally** — browser `localStorage` in dev, and native disk persistence via the Rust layer in the packaged app (`.sos` JSON snapshots, CSV/MD/HTML exports).
+
+## 🔄 Import & Export
+
+All conversion runs locally in the browser/webview — no file ever leaves your machine.
+
+| Module | Import | Export |
+|---|---|---|
+| 📄 **Docs** | `.docx` · `.odt` · `.rtf` · `.md` · `.html` · `.txt` | `.docx` · `.odt` · `.pdf` · `.html` · `.md` · `.txt` |
+| 📊 **Sheets** | `.xlsx` · `.ods` · `.csv` · `.tsv` · `.json` | `.xlsx` · `.ods` · `.csv` · `.tsv` · `.json` |
+| 🖼️ **Slides** | `.json` (SOS deck) · `.html` (deck export) | `.html` (self-running deck) · `.json` · `.pdf` |
+
+`File → Import file…` and `File → Download…` in every editor open the same transfer dialog. The conversion engine (`src/lib/converters.ts` + a dependency-free ZIP writer) is covered by round-trip unit tests — `npm test`.
 
 ## 🏗 Architecture
 

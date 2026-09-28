@@ -274,7 +274,7 @@
       // Help
       case "help:shortcuts": dialog = "shortcuts"; return;
       case "help:search": dialog = "replace"; return;
-      case "help:about": alert("Simple Office Suite v1.1.0 — offline-first, MIT licensed."); return;
+      case "help:about": alert("Simple Office Suite v1.2.0 — offline-first, MIT licensed."); return;
       // Canvas-only / passthrough
       case "print": doExport("pdf"); return;
       case "paintFormat": canvasApi?.exec("sos:paint-get"); return;
@@ -418,13 +418,25 @@
     lastCmdAt = t;
     onMenuCmd((e as CustomEvent<{ cmd: string; payload?: string }>).detail);
   }
+  // App-level ⌘Z fallback skips native-undo surfaces, so receiving these events
+  // means the canvas is not focused — forward to its history anyway (no-op if none).
+  function onUndoRequest(): void { canvasApi?.exec("undo"); }
+  function onRedoRequest(): void { canvasApi?.exec("redo"); }
   $: bridgeRef = registerBridge();
   function registerBridge(): number {
     window.removeEventListener("sos-cmd-writer", onWindowCmd);
     window.addEventListener("sos-cmd-writer", onWindowCmd);
+    window.removeEventListener("sos:undo-request", onUndoRequest);
+    window.addEventListener("sos:undo-request", onUndoRequest);
+    window.removeEventListener("sos:redo-request", onRedoRequest);
+    window.addEventListener("sos:redo-request", onRedoRequest);
     return 1;
   }
-  onDestroy(() => window.removeEventListener("sos-cmd-writer", onWindowCmd));
+  onDestroy(() => {
+    window.removeEventListener("sos-cmd-writer", onWindowCmd);
+    window.removeEventListener("sos:undo-request", onUndoRequest);
+    window.removeEventListener("sos:redo-request", onRedoRequest);
+  });
 </script>
 
 {#if doc}

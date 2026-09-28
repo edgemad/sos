@@ -1,7 +1,7 @@
 {
   "name": "simple-office-suite",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A complete offline-first, Google Workspace-style office suite: Docs, Sheets, Slides, Forms, Keep and Calendar. Zero cloud, MIT licensed.",
   "type": "module",
   "scripts": {
@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
@@ -27,6 +29,8 @@
     "postcss": "^8.4.47",
     "svelte": "^4.2.19",
     "svelte-check": "^4.0.5",
+    "vitest": "^2.1.8",
+    "jsdom": "^25.0.1",
     "tailwindcss": "^3.4.14",
     "tslib": "^2.8.0",
     "typescript": "^5.6.3",
