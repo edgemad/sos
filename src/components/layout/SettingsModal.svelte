@@ -93,7 +93,8 @@
       </section>
     </div>
 
-    <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+    <div class="px-5 py-3 border-t border-gray-200/70 dark:border-gray-700/60 flex items-center justify-between">
+      <span class="text-xs text-gray-400">Developed by <span class="font-medium text-gray-600 dark:text-gray-300">Talia</span> · MIT License</span>
       <button class="btn btn-primary" on:click={() => dispatch("close")}>Done</button>
     </div>
   </div>

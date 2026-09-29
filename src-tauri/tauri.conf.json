@@ -42,6 +42,8 @@
       "icons/icon.ico"
     ],
     "category": "Productivity",
+    "publisher": "Talia",
+    "copyright": "© 2026 Talia · MIT License",
     "shortDescription": "Offline-first office suite",
     "longDescription": "A complete offline-first, Google Workspace-style office suite: documents, spreadsheets, presentations, forms, notes and calendar. All data stays on your machine.",
     "linux": {

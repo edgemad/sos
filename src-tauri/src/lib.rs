@@ -160,7 +160,18 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
 
     // ── App menu (macOS only shows under the app name) ─────────────
     let app_submenu = SubmenuBuilder::new(app, "Simple Office Suite")
-        .about(Option::<AboutMetadata>::None)
+        .about(Some(AboutMetadata {
+            name: Some("Simple Office Suite".into()),
+            version: Some(app.package_info().version.to_string()),
+            authors: Some(vec!["Talia".into()]),
+            comments: Some(
+                "Offline-first office suite: documents, spreadsheets, presentations, forms, notes and calendar. All data stays on your machine."
+                    .into(),
+            ),
+            copyright: Some("© 2026 Talia · MIT License".into()),
+            credits: Some("Developed by Talia".into()),
+            ..Default::default()
+        }))
         .separator()
         .text("settings", "Settings…")
         .text("check_updates", "Check for Updates…")

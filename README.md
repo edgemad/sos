@@ -4,6 +4,17 @@
 
 Documents · Spreadsheets · Presentations · Forms · Notes · Calendar — zero cloud, zero accounts, zero telemetry. MIT licensed.
 
+## 💡 What is Simple Office Suite?
+
+**SOS is a free, open-source office suite that runs entirely on your own computer.** Think Google Docs, Sheets and Slides — but you don't need an account, an internet connection, or a subscription, and your files never leave your machine.
+
+- **Open it and start working.** One app with six tools: write documents, crunch numbers in spreadsheets, build slide decks, create forms, jot sticky notes, and plan your calendar.
+- **Your data is yours.** Everything is stored locally on your device and auto-saves as you type. You can export to open formats (PDF, Markdown, CSV, HTML, JSON) any time — no lock-in.
+- **Works offline, forever.** Install it once from the [Releases](https://github.com/edgemad/sos/releases) page and it runs on Windows, macOS, Linux, and Android with no extra drivers or runtimes.
+- **Small and fast.** The whole suite is a few megabytes and opens instantly, built with Tauri (Rust + system web engines) and Svelte.
+
+> Developed by **Talia** · Licensed under [MIT](./LICENSE) — free to use, study, modify and share.
+
 <p align="center">
   <img src="public/logo.svg" width="96" alt="Simple Office Suite logo" />
 </p>
