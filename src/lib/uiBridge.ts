@@ -21,23 +21,34 @@ export function registerAskHost(fn: ((r: AskRequest | null) => void) | null): vo
   if (current) fn?.(current);
 }
 
+/** True inside the Tauri webview, where window.prompt/confirm exist but are
+ *  silent no-ops (WKWebView/WebView2) — they must never be trusted there. */
+function isTauriWebView(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 function ask(kind: AskKind, title: string, value: string, placeholder: string): Promise<string | null> {
-  // Real natives still work in plain browsers — use them when available.
-  if (kind === "prompt" && typeof window !== "undefined" && window.prompt) {
-    try {
-      const v = window.prompt(title, value);
-      return Promise.resolve(v === null ? null : String(v));
-    } catch {
-      /* fall through to in-app dialog */
+  // Real natives still work in plain browsers — use them there, but never in
+  // Tauri where they resolve instantly with null/false (silent data loss).
+  if (!isTauriWebView()) {
+    if (kind === "prompt" && typeof window !== "undefined" && window.prompt) {
+      try {
+        const v = window.prompt(title, value);
+        return Promise.resolve(v === null ? null : String(v));
+      } catch {
+        /* fall through to in-app dialog */
+      }
+    }
+    if (kind === "confirm" && typeof window !== "undefined" && window.confirm) {
+      try {
+        return Promise.resolve(window.confirm(title) ? "ok" : null);
+      } catch {
+        /* fall through to in-app dialog */
+      }
     }
   }
-  if (kind === "confirm" && typeof window !== "undefined" && window.confirm) {
-    try {
-      return Promise.resolve(window.confirm(title) ? "ok" : null);
-    } catch {
-      /* fall through to in-app dialog */
-    }
-  }
+  // No dialog host mounted (App not ready): never hang the caller forever.
+  if (!notify) return Promise.resolve(null);
   return new Promise((resolve) => {
     current = { kind, title, value, placeholder, resolve };
     notify?.(current);

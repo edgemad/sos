@@ -49,7 +49,7 @@
 </script>
 
 {#if $sidebarOpen}
-  <aside class="w-48 shrink-0 flex flex-col bg-gray-50 dark:bg-[#252525] border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+  <aside class="w-48 shrink-0 flex flex-col glass-bar border-r border-white/40 dark:border-white/10 overflow-y-auto">
     <nav class="p-1.5 space-y-0.5">
       <button class="btn btn-ghost w-full !justify-start !h-7 text-xs" on:click={() => go("home")}>
         <span>{moduleIcon.home}</span> Home
@@ -57,7 +57,7 @@
       {#each modules as m (m)}
         <button
           class="btn btn-ghost w-full !justify-start !h-7 text-xs"
-          style={activeModuleId === m ? "background:rgba(0,0,0,.06)" : ""}
+          style={activeModuleId === m ? "background:var(--glass-bg-soft);box-shadow:var(--glass-edge)" : ""}
           on:click={() => go(m)}
         >
           <span>{moduleIcon[m]}</span> {moduleLabel[m]}
@@ -65,7 +65,7 @@
       {/each}
     </nav>
 
-    <div class="mt-1 border-t border-gray-200 dark:border-gray-700 pt-1.5 px-1.5 space-y-0.5">
+    <div class="mt-1 border-t border-white/40 dark:border-white/10 pt-1.5 px-1.5 space-y-0.5">
       <button class="btn btn-ghost w-full !justify-start !h-7 text-xs" on:click={() => createFile("document")}>
         <span>＋</span> New document
       </button>

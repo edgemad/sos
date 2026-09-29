@@ -42,7 +42,7 @@
   };
 </script>
 
-<footer class="h-7 shrink-0 flex items-center gap-4 px-3 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-[#252525] border-t border-gray-200 dark:border-gray-700">
+<footer class="h-7 shrink-0 flex items-center gap-4 px-3 text-xs text-gray-500 dark:text-gray-400 glass-bar border-t border-white/40 dark:border-white/10">
   <span>{moduleHint[$activeModule] ?? ""}</span>
   <span class="flex-1" />
   {#if file?.kind === "document"}

@@ -1,6 +1,6 @@
 [package]
 name = "simple-office-suite"
-version = "1.3.0"
+version = "1.4.0"
 description = "A complete offline-first, Google Workspace-style office suite: Docs, Sheets, Slides, Forms, Keep and Calendar."
 authors = ["Simple Office Suite Contributors"]
 license = "MIT"

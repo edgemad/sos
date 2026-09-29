@@ -45,15 +45,15 @@
 
 <svelte:window on:click={closeMenus} />
 
-<div class="ribbon select-none border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#252525] shrink-0">
+<div class="ribbon select-none border-b border-white/40 dark:border-white/10 glass-bar shrink-0">
   <!-- Tab strip -->
   <div class="flex items-end gap-0.5 px-2 pt-1">
     {#each tabs as t, i (t.id)}
       <button
-        class="px-3 h-7 text-xs font-medium rounded-t-md transition-colors cursor-pointer
+        class="px-3 h-7 text-xs font-medium rounded-t-md transition-all cursor-pointer
           {i === activeTab
-            ? 'bg-white dark:bg-[#2d2d2d] border border-b-0 border-gray-200 dark:border-gray-700'
-            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/60'}"
+            ? 'bg-white/70 dark:bg-white/10 border border-b-0 border-white/60 dark:border-white/15'
+            : 'text-gray-600 dark:text-gray-400 hover:bg-white/40 dark:hover:bg-white/5'}"
         style={i === activeTab ? `color:${accent}` : ""}
         on:click={() => selectTab(i)}
       >

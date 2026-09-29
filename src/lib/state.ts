@@ -19,6 +19,7 @@ import type {
   FormResponse
 } from "../types";
 import { uid, now } from "./utils";
+import { settings } from "./settings";
 
 const STORAGE_KEY = "sos.state.v1";
 
@@ -87,11 +88,12 @@ export const state = writable<SosState>(loadState());
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let dirty = false;
+let flushInstalled = false;
 
 state.subscribe((s) => {
   dirty = true;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(persist, 600);
+  saveTimer = setTimeout(persist, get(settings).autosaveMs);
   void s;
 });
 
@@ -100,6 +102,32 @@ export async function persist(): Promise<void> {
   dirty = false;
   safeSetItem(STORAGE_KEY, JSON.stringify(get(state)));
 }
+
+// Last line of defense for data safety: flush pending writes when the window
+// is hidden or quitting. Tauri fires close-requested before teardown; browsers
+// get pagehide/visibilitychange. Without this, the final sub-second of edits
+// could be lost on quit.
+export function installFlushGuards(): void {
+  if (flushInstalled || typeof window === "undefined") return;
+  flushInstalled = true;
+  const flush = (): void => {
+    if (dirty) void persist();
+  };
+  window.addEventListener("pagehide", flush);
+  window.addEventListener("beforeunload", flush);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
+  try {
+    void import("@tauri-apps/api/window")
+      .then((m) => m.getCurrentWindow().onCloseRequested(() => flush()))
+      .catch(() => {});
+  } catch {
+    /* browser build */
+  }
+}
+
+installFlushGuards();
 
 // ── UI stores ───────────────────────────────────────────────────
 

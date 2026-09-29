@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { activeModule, activeFileId, openFile, paletteOpen, createFile, updateContent, renameFile } from "./lib/state";
+  import { activeModule, activeFileId, openFile, paletteOpen, createFile, updateContent, renameFile, darkMode } from "./lib/state";
   import { get } from "svelte/store";
   import { installShortcutListener, matches, modLabel } from "./lib/shortcuts";
   import { onNativeMenu } from "./lib/menuBridge";
   import { exportPdf, toCsv } from "./lib/utils";
   import { evaluateCell, displayValue, colToName } from "./lib/formula";
   import { saveFileDialog, writeFile } from "./lib/tauri";
-  import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, type ToastMsg } from "./lib/uiBridge";
+  import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, toast, type ToastMsg } from "./lib/uiBridge";
   import Header from "./components/layout/Header.svelte";
   import Rail from "./components/layout/Rail.svelte";
   import StatusBar from "./components/layout/StatusBar.svelte";
@@ -29,6 +29,20 @@
   $: showsSheets = openKind === "spreadsheet";
   $: showsSlides = openKind === "deck";
 
+  // Liquid Glass: tint the whole chrome with the active module's accent.
+  const moduleAccent: Record<ModuleId, string> = {
+    home: "#1a73e8",
+    writer: "#1a73e8",
+    sheets: "#0f9d58",
+    slides: "#f4b400",
+    forms: "#7248b9",
+    keep: "#fbbc04",
+    calendar: "#1967d2"
+  };
+  $: if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty("--sos-accent", moduleAccent[mod] ?? "#1a73e8");
+  }
+
   let settingsOpen = false;
   let findOpen = false;
 
@@ -41,13 +55,23 @@
   async function saveCurrentToDisk(): Promise<void> {
     const file = get(openFile);
     if (!file) return;
-    const payload = JSON.stringify(file, null, 2);
-    const lastPath = (file.content as { __path?: string }).__path;
-    if (lastPath) {
-      await writeFile(lastPath, payload);
-    } else {
-      const p = await saveFileDialog(`${file.name.replace(/[\\/:*?"<>|]/g, "_")}.sos`, payload);
-      if (p) updateContent(file.id, { ...(file.content as object), __path: p });
+    try {
+      const payload = JSON.stringify(file, null, 2);
+      const lastPath = (file.content as { __path?: string }).__path;
+      if (lastPath) {
+        const ok = await writeFile(lastPath, payload);
+        if (ok) toast("Saved to disk");
+        else toast("Could not write the file — is it still at " + lastPath + "?");
+      } else {
+        const p = await saveFileDialog(`${file.name.replace(/[\\/:*?"<>|]/g, "_")}.sos`, payload);
+        if (p) {
+          updateContent(file.id, { ...(file.content as object), __path: p });
+          toast("Saved to " + p);
+        }
+      }
+    } catch (e) {
+      console.error("save failed", e);
+      toast("Save failed: " + (e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -103,7 +127,7 @@
         if (!nativeEditable) { e.preventDefault(); window.dispatchEvent(new CustomEvent("sos:undo-request")); }
       }
       else if (matches(e, "mod+shift+c")) { e.preventDefault(); window.dispatchEvent(new CustomEvent("sos:wordcount-request")); }
-      else if (matches(e, "mod+alt+d")) { e.preventDefault(); document.documentElement.classList.toggle("dark"); }
+      else if (matches(e, "mod+alt+d")) { e.preventDefault(); darkMode.update((v) => !v); }
       else if (matches(e, "mod+f")) { e.preventDefault(); findOpen = true; window.dispatchEvent(new CustomEvent("sos:find-request")); }
     });
 
@@ -118,7 +142,7 @@
         case "save": void saveCurrentToDisk(); break;
         case "export-pdf": exportCurrentPdf(); break;
         case "command_palette": paletteOpen.set(true); break;
-        case "dark_mode": document.documentElement.classList.toggle("dark"); break;
+        case "dark_mode": darkMode.update((v) => !v); break;
         case "toggle_sidebar": window.dispatchEvent(new CustomEvent("sos:toggle-sidebar")); break;
         case "toggle_ribbon": window.dispatchEvent(new CustomEvent("sos:toggle-ribbon")); break;
         case "zoom_in": window.dispatchEvent(new CustomEvent("sos:zoom", { detail: 1 })); break;
@@ -168,10 +192,15 @@
 
 <svelte:window on:error={onCrash} />
 
+<!-- Liquid Glass ambient backdrop: slow aurora blobs behind translucent chrome -->
+<div class="sos-ambient" aria-hidden="true">
+  <div class="sos-ambient-blob"></div>
+</div>
+
 <div class="h-full flex flex-col">
   {#if crashed}
-    <div class="fixed inset-0 z-[200] bg-white dark:bg-[#1f1f1f] grid place-items-center p-8">
-      <div class="card max-w-md p-6 text-center">
+    <div class="fixed inset-0 z-[200] bg-white/70 dark:bg-[#141519]/70 backdrop-blur-xl grid place-items-center p-8">
+      <div class="glass-strong max-w-md p-6 text-center rounded-xl">
         <div class="text-4xl mb-3">🛠️</div>
         <h2 class="font-semibold text-lg mb-1">Something went wrong</h2>
         <p class="text-sm text-gray-500 mb-1">Your files are safe — everything is stored locally.</p>
@@ -188,7 +217,7 @@
   <div class="flex-1 flex min-h-0">
     <Rail activeModuleId={mod} />
 
-    <main class="flex-1 min-w-0 flex flex-col bg-white dark:bg-[#1f1f1f] overflow-hidden">
+    <main class="flex-1 min-w-0 flex flex-col overflow-hidden">
       {#if mod === "home"}
         <Home />
       {:else if mod === "writer"}
@@ -228,8 +257,8 @@
   {/if}
 
   {#if askReq}
-    <div class="fixed inset-0 z-[150] bg-black/40 grid place-items-center" on:click|self={() => resolveAsk(null)}>
-      <div class="card w-[380px] max-w-[92vw] p-5 shadow-modal" on:click|stopPropagation>
+    <div class="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm grid place-items-center" on:click|self={() => resolveAsk(null)}>
+      <div class="glass-strong w-[380px] max-w-[92vw] p-5 rounded-xl" on:click|stopPropagation>
         <h3 class="font-medium mb-3">{askReq.title}</h3>
         {#if askReq.kind === "prompt"}
           <input
@@ -253,7 +282,7 @@
   {#if toasts.length}
     <div class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[160] flex flex-col gap-2 items-center">
       {#each toasts as t (t.id)}
-        <div class="card !py-2 !px-4 text-sm shadow-modal bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900">{t.msg}</div>
+        <div class="glass-strong !py-2 !px-4 text-sm rounded-full">{t.msg}</div>
       {/each}
     </div>
   {/if}

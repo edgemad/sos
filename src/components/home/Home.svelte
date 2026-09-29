@@ -124,13 +124,13 @@
         <button
           class="btn btn-ghost !px-2"
           title="Grid view"
-          style={view === "grid" ? "background:rgba(0,0,0,.06)" : ""}
+          style={view === "grid" ? "background:var(--glass-bg-soft)" : ""}
           on:click={() => (view = "grid")}
         >▦</button>
         <button
           class="btn btn-ghost !px-2"
           title="List view"
-          style={view === "list" ? "background:rgba(0,0,0,.06)" : ""}
+          style={view === "list" ? "background:var(--glass-bg-soft)" : ""}
           on:click={() => (view = "list")}
         >☰</button>
       </div>
@@ -139,7 +139,7 @@
     <div class="flex gap-3 overflow-x-auto pb-2">
       {#each templates as t (t.kind)}
         <button
-          class="card p-4 w-[190px] shrink-0 text-left hover:shadow-modal transition-shadow"
+          class="card glass p-4 w-[190px] shrink-0 text-left hover:shadow-modal transition-transform hover:-translate-y-0.5"
           on:click={() => createFile(t.kind)}
         >
           <div
@@ -193,7 +193,7 @@
     {:else if view === "grid"}
       <div class="grid gap-3" style="grid-template-columns:repeat(auto-fill,minmax(210px,1fr))">
         {#each visible as f (f.id)}
-          <div class="card overflow-hidden group relative hover:shadow-modal transition-shadow">
+          <div class="card glass overflow-hidden group relative hover:shadow-modal transition-transform hover:-translate-y-0.5">
             <button class="block w-full text-left" on:click={() => openInEditor(f.id)}>
               <div
                 class="h-[110px] grid place-items-center text-4xl"
@@ -211,36 +211,36 @@
             </button>
             <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                class="w-7 h-7 grid place-items-center rounded-full bg-white/90 dark:bg-gray-800/90 shadow-card text-sm"
+                class="w-7 h-7 grid place-items-center rounded-full glass-strong text-sm"
                 title={f.starred ? "Unstar" : "Star"}
                 on:click={() => toggleStar(f.id)}
               >{f.starred ? "★" : "☆"}</button>
               {#if !f.trashed}
                 <button
-                  class="w-7 h-7 grid place-items-center rounded-full bg-white/90 dark:bg-gray-800/90 shadow-card text-sm"
+                  class="w-7 h-7 grid place-items-center rounded-full glass-strong text-sm"
                   title="Move to trash"
                   on:click={() => trashFile(f.id)}
                 >🗑️</button>
               {:else}
                 <button
-                  class="w-7 h-7 grid place-items-center rounded-full bg-white/90 dark:bg-gray-800/90 shadow-card text-sm"
+                  class="w-7 h-7 grid place-items-center rounded-full glass-strong text-sm"
                   title="Restore"
                   on:click={() => restoreFile(f.id)}
                 >♻️</button>
                 <button
-                  class="w-7 h-7 grid place-items-center rounded-full bg-white/90 dark:bg-gray-800/90 shadow-card text-sm"
+                  class="w-7 h-7 grid place-items-center rounded-full glass-strong text-sm"
                   title="Delete forever"
                   on:click={() => deleteForever(f.id)}
                 >✖️</button>
               {/if}
               <button
-                class="w-7 h-7 grid place-items-center rounded-full bg-white/90 dark:bg-gray-800/90 shadow-card text-sm"
+                class="w-7 h-7 grid place-items-center rounded-full glass-strong text-sm"
                 title="Change color"
                 on:click={() => (colorMenuFor = colorMenuFor === f.id ? null : f.id)}
               >🎨</button>
             </div>
             {#if colorMenuFor === f.id}
-              <div class="absolute top-11 right-2 z-30 card p-2 flex gap-1.5 shadow-modal">
+              <div class="absolute top-11 right-2 z-30 glass-strong rounded-lg p-2 flex gap-1.5">
                 {#each palette as c (c)}
                   <button
                     class="w-6 h-6 rounded-full border border-gray-300"
@@ -255,7 +255,7 @@
         {/each}
       </div>
     {:else}
-      <div class="card divide-y divide-gray-200 dark:divide-gray-700">
+      <div class="card glass divide-y divide-gray-200/70 dark:divide-gray-700/60">
         {#each visible as f (f.id)}
           <div class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/40 group">
             <span class="text-lg">{iconFor(f.kind)}</span>

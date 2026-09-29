@@ -2,7 +2,7 @@
   // Settings modal — opened from the native menu or the header gear.
   import { get } from "svelte/store";
   import { settings, resetSettings } from "../../lib/settings";
-  import { state } from "../../lib/state";
+  import { state, darkMode } from "../../lib/state";
   import { saveFileDialog } from "../../lib/tauri";
   import { createEventDispatcher } from "svelte";
 
@@ -26,8 +26,8 @@
   const checkboxValue = (e: Event): boolean => (e.currentTarget as HTMLInputElement).checked;
 </script>
 
-<div class="fixed inset-0 z-[60] bg-black/40 grid place-items-center" on:click|self={() => dispatch("close")}>
-  <div class="card w-[520px] max-w-[94vw] shadow-modal" on:click|stopPropagation>
+<div class="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm grid place-items-center" on:click|self={() => dispatch("close")}>
+  <div class="glass-strong w-[520px] max-w-[94vw] rounded-xl" on:click|stopPropagation>
     <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700">
       <h2 class="font-semibold">Settings</h2>
       <button class="btn btn-ghost !px-2" title="Close" on:click={() => dispatch("close")}>✕</button>
@@ -39,10 +39,10 @@
         <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Appearance</h3>
         <div class="flex items-center justify-between">
           <span class="text-sm">Theme</span>
-          <div class="flex gap-1">
-            <button class="btn btn-ghost text-xs border border-gray-300" on:click={() => document.documentElement.classList.remove("dark")}>Light</button>
-            <button class="btn btn-ghost text-xs border border-gray-300" on:click={() => document.documentElement.classList.add("dark")}>Dark</button>
-          </div>
+        <div class="flex gap-1">
+          <button class="btn btn-ghost text-xs border border-gray-300 {$darkMode ? '' : '!bg-docs/10 !border-docs !text-docs'}" on:click={() => darkMode.set(false)}>Light</button>
+          <button class="btn btn-ghost text-xs border border-gray-300 {$darkMode ? '!bg-docs/10 !border-docs !text-docs' : ''}" on:click={() => darkMode.set(true)}>Dark</button>
+        </div>
         </div>
       </section>
 

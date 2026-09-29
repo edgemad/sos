@@ -2,54 +2,182 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Liquid Glass tokens ─────────────────────────────────────────
+   Translucent surfaces with backdrop blur, a specular top highlight
+   and a per-module accent that tints the chrome. Light + dark. */
+:root {
+  --sos-accent: #1a73e8;
+  --glass-blur: 20px;
+  --glass-sat: 170%;
+  --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.52));
+  --glass-bg-strong: linear-gradient(135deg, rgba(255, 255, 255, 0.93), rgba(255, 255, 255, 0.8));
+  --glass-bg-soft: rgba(255, 255, 255, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.62);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(17, 25, 40, 0.04);
+  --glass-shadow: 0 8px 32px rgba(17, 25, 40, 0.1);
+  --glass-tint: color-mix(in srgb, var(--sos-accent) 7%, transparent);
+  --page-bg: #eef2f9;
+}
+
+.dark {
+  --glass-bg: linear-gradient(135deg, rgba(44, 46, 52, 0.72), rgba(30, 32, 37, 0.55));
+  --glass-bg-strong: linear-gradient(135deg, rgba(48, 50, 56, 0.94), rgba(35, 37, 42, 0.86));
+  --glass-bg-soft: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --page-bg: #141519;
+}
+
 @layer base {
   html, body, #app {
     height: 100%;
     overflow: hidden;
   }
   body {
-    @apply bg-white text-gray-900 dark:bg-[#1f1f1f] dark:text-gray-100 font-sans antialiased;
+    @apply text-gray-900 dark:text-gray-100 font-sans antialiased;
+    background: var(--page-bg);
   }
 }
 
 @layer components {
+  /* Buttons keep their familiar shapes; ghost hovers get a wet-glass sheen */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 h-8 text-sm font-medium
       transition-colors select-none cursor-pointer whitespace-nowrap;
   }
   .btn-primary {
-    @apply bg-docs text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-card;
+    background: linear-gradient(135deg, var(--sos-accent), color-mix(in srgb, var(--sos-accent) 78%, #000 6%));
   }
+  .btn-primary:hover { filter: brightness(1.07); }
   .btn-ghost {
-    @apply text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700;
+    @apply text-gray-700 dark:text-gray-300;
+  }
+  .btn-ghost:hover {
+    background: var(--glass-bg-soft);
   }
   .btn-danger {
     @apply bg-red-600 text-white hover:bg-red-700;
   }
+
+  /* Cards: cheap translucency (no backdrop-filter) so big grids stay fast */
   .card {
-    @apply bg-white dark:bg-[#2d2d2d] rounded-xl border border-gray-200 dark:border-gray-700 shadow-card;
+    @apply rounded-xl shadow-card;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-edge), var(--glass-shadow);
   }
+
+  /* Glass chrome: real backdrop blur for headers, rails, modals, menus */
+  .glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-edge), var(--glass-shadow);
+  }
+  .glass-strong {
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 8px)) saturate(var(--glass-sat));
+    backdrop-filter: blur(calc(var(--glass-blur) + 8px)) saturate(var(--glass-sat));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-edge), 0 4px 8px 3px rgba(60, 64, 67, 0.15), 0 1px 3px rgba(60, 64, 67, 0.3);
+  }
+
+  /* Full-width chrome surfaces (header, rail, ribbon, status bar).
+     Same liquid material without the heavy drop shadow. */
+  .glass-bar {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+
   .input {
-    @apply h-8 rounded-md border border-gray-300 dark:border-gray-600 bg-transparent
-      px-2.5 text-sm outline-none focus:border-docs focus:ring-1 focus:ring-docs;
+    @apply h-8 rounded-md border border-gray-300/70 dark:border-gray-600/70
+      px-2.5 text-sm outline-none;
+    background: var(--glass-bg-soft);
   }
+  .input:focus {
+    border-color: var(--sos-accent);
+    box-shadow: 0 0 0 1px var(--sos-accent);
+  }
+
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
   .menu {
-    @apply absolute z-40 min-w-[180px] rounded-lg border border-gray-200 dark:border-gray-600
-      bg-white dark:bg-[#2d2d2d] shadow-modal py-1.5;
+    @apply absolute z-40 min-w-[180px] rounded-lg py-1.5 glass-strong;
   }
   .menu-item {
     @apply flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left cursor-pointer
-      hover:bg-gray-100 dark:hover:bg-gray-700 whitespace-nowrap;
+      whitespace-nowrap;
+  }
+  .menu-item:hover {
+    background: var(--glass-bg-soft);
   }
   .menu-sep {
-    @apply my-1.5 border-t border-gray-200 dark:border-gray-600;
+    @apply my-1.5 border-t border-gray-200/70 dark:border-gray-600/50;
   }
 }
 
-/* Slim, Google-Workspace-like scrollbars */
+/* Browsers without backdrop-filter still get a readable solid surface */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass, .glass-strong {
+    background: white;
+  }
+  .dark .glass, .dark .glass-strong {
+    background: #2d2d2d;
+  }
+}
+
+/* ── Ambient backdrop: slow aurora blobs behind the whole app ──── */
+.sos-ambient {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -10;
+}
+.sos-ambient::before,
+.sos-ambient::after,
+.sos-ambient .sos-ambient-blob {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.sos-ambient::before {
+  width: 44vmax; height: 44vmax;
+  left: -12vmax; top: -14vmax;
+  background: color-mix(in srgb, var(--sos-accent) 34%, transparent);
+  animation: sos-drift-a 46s ease-in-out infinite alternate;
+}
+.sos-ambient::after {
+  width: 38vmax; height: 38vmax;
+  right: -10vmax; top: 22vh;
+  background: color-mix(in srgb, #34a853 26%, transparent);
+  animation: sos-drift-b 58s ease-in-out infinite alternate;
+}
+.sos-ambient .sos-ambient-blob {
+  width: 40vmax; height: 40vmax;
+  left: 24vw; bottom: -18vmax;
+  background: color-mix(in srgb, #a142f4 20%, transparent);
+  animation: sos-drift-c 70s ease-in-out infinite alternate;
+}
+.dark .sos-ambient::before,
+.dark .sos-ambient::after,
+.dark .sos-ambient .sos-ambient-blob { opacity: 0.3; }
+@keyframes sos-drift-a { to { transform: translate(9vw, 7vh) scale(1.15); } }
+@keyframes sos-drift-b { to { transform: translate(-7vw, -5vh) scale(1.1); } }
+@keyframes sos-drift-c { to { transform: translate(5vw, -8vh) scale(0.92); } }
+@media (prefers-reduced-motion: reduce) {
+  .sos-ambient::before, .sos-ambient::after, .sos-ambient .sos-ambient-blob { animation: none; }
+}
+
+/* Slim glassy scrollbars */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(0,0,0,.28) transparent;
@@ -93,9 +221,16 @@
 .slide-block { @apply absolute overflow-hidden cursor-move; }
 .slide-block:focus-within { @apply ring-2 ring-blue-500 z-10; }
 
-/* Print: only the writer pages survive */
+/* Print: only the writer pages survive; kill glass + ambience */
 @media print {
   body * { visibility: hidden; }
   .print-area, .print-area * { visibility: visible; }
   .print-area { position: absolute; inset: 0; }
+  .sos-ambient { display: none; }
+  .glass, .glass-strong {
+    background: white !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
 }

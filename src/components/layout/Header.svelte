@@ -164,7 +164,7 @@
   }
 </script>
 
-<header class="h-11 flex items-center gap-2 px-2.5 bg-gray-50 dark:bg-[#2d2d2d] border-b border-gray-200 dark:border-gray-700 shrink-0">
+<header class="h-11 flex items-center gap-2 px-2.5 glass-bar border-b border-white/40 dark:border-white/10 shrink-0">
   <button
     class="btn btn-ghost !px-1.5 !h-7"
     title="Toggle sidebar"
@@ -187,9 +187,10 @@
   <nav class="flex items-center gap-0.5 overflow-x-auto">
     {#each tabs as t (t.id)}
       <button
-        class="px-2.5 h-7 text-xs font-medium rounded-md border-b-2 border-transparent transition-colors whitespace-nowrap cursor-pointer
-          text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-        style={$activeModule === t.id ? `border-color:${t.color};color:${t.color}` : ""}
+        class="px-2.5 h-7 text-xs font-medium rounded-md transition-all whitespace-nowrap cursor-pointer
+          text-gray-600 dark:text-gray-300 hover:bg-white/40 dark:hover:bg-white/10
+          {$activeModule === t.id ? 'bg-white/60 dark:bg-white/10 shadow-card' : ''}"
+        style={$activeModule === t.id ? `color:${t.color};text-shadow:0 0 12px ${t.color}40` : ""}
         on:click={() => setModule(t.id)}
       >
         {t.label}
@@ -214,7 +215,7 @@
         <button class="btn btn-ghost !px-1 !h-7 text-xs" title="Rename" on:click={startRename}>✏️</button>
       {/if}
 
-      <span class="chip bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 !text-[10px] !px-2">
+      <span class="chip glass !text-[10px] !px-2 text-gray-500 dark:text-gray-400">
         {$saveStatus === "saving" ? "Saving…" : "Saved"}
       </span>
 

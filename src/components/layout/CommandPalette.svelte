@@ -81,11 +81,9 @@
   }
 </script>
 
-<svelte:window on:keydown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); paletteOpen.update((v) => !v); } }} />
-
 {#if $paletteOpen}
-  <div class="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-[12vh]" on:click|self={close}>
-    <div class="w-[560px] max-w-[92vw] card shadow-modal overflow-hidden" on:click|stopPropagation>
+  <div class="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-start justify-center pt-[12vh]" on:click|self={close}>
+    <div class="w-[560px] max-w-[92vw] glass-strong rounded-xl overflow-hidden" on:click|stopPropagation>
       <input
         class="w-full h-12 px-4 text-base bg-transparent outline-none border-b border-gray-200 dark:border-gray-700"
         placeholder="Type a command or search files…"
@@ -95,7 +93,7 @@
       <div class="max-h-[320px] overflow-y-auto py-1">
         {#each commands as cmd, i (cmd.id)}
           <button
-            class="menu-item !items-center {i === selectedIndex ? 'bg-gray-100 dark:bg-gray-700' : ''}"
+            class="menu-item !items-center {i === selectedIndex ? 'bg-white/60 dark:bg-white/10' : ''}"
             on:mouseover={() => (selectedIndex = i)}
             on:click={() => { cmd.run(); close(); }}
           >
