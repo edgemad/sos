@@ -59,9 +59,7 @@
         "language": "en-US"
       },
       "nsis": {
-        "languages": ["en-US"],
-        "installMode": "currentUser",
-        "displayLanguageSelector": false
+        "installMode": "currentUser"
       }
     }
   }
