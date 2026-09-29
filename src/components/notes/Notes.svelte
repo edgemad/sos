@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Keep: pinboard of colored notes with checklists.
+  // Notes module: pinboard of colored notes with checklists.
   import { state, addNote, updateNote, deleteNote } from "../../lib/state";
   import type { Note } from "../../types";
 

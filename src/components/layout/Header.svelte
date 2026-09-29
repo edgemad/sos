@@ -16,7 +16,7 @@
     { id: "sheets", label: "Sheets", color: "#0f9d58" },
     { id: "slides", label: "Slides", color: "#f4b400" },
     { id: "forms", label: "Forms", color: "#7248b9" },
-    { id: "keep", label: "Keep", color: "#fbbc04" },
+    { id: "notes", label: "Notes", color: "#fbbc04" },
     { id: "calendar", label: "Calendar", color: "#1967d2" }
   ];
 

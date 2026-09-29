@@ -229,7 +229,7 @@ export function moduleForKind(kind: DocKind): ModuleId {
     case "spreadsheet": return "sheets";
     case "deck": return "slides";
     case "form": return "forms";
-    case "note": return "keep";
+    case "note": return "notes";
   }
 }
 
@@ -419,7 +419,7 @@ export function duplicateFile(id: string): void {
   openInEditor(newId);
 }
 
-// ── Notes (Keep) ────────────────────────────────────────────────
+// ── Notes (Keep module) ────────────────────────────────────────────────
 
 export function addNote(color = "#fff475"): string {
   const n: Note = { id: uid(), text: "", color, pinned: false, updatedAt: now(), checklist: [] };

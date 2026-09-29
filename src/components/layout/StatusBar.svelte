@@ -37,7 +37,7 @@
     sheets: "Sheets — offline spreadsheet",
     slides: "Slides — offline presentations",
     forms: "Forms — offline surveys",
-    keep: "Keep — offline notes",
+    notes: "Notes — notes & checklists",
     calendar: "Calendar — offline schedule"
   };
 </script>

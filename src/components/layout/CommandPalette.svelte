@@ -28,7 +28,7 @@
       { m: "sheets", label: "Go to Sheets", icon: "📊" },
       { m: "slides", label: "Go to Slides", icon: "🖼️" },
       { m: "forms", label: "Go to Forms", icon: "📝" },
-      { m: "keep", label: "Go to Keep", icon: "🗒️" },
+      { m: "notes", label: "Go to Notes", icon: "🗒️" },
       { m: "calendar", label: "Go to Calendar", icon: "📅" }
     ];
     for (const n of nav) {

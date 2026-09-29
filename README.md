@@ -24,7 +24,7 @@ Documents · Spreadsheets · Presentations · Forms · Notes · Calendar — zer
 Cross-sheet references (`=Sheet2!A1`, `=SUM(Data!A1:A3)`), **named ranges** (`=SUM(Sales)` — manage via Data ▸ Named ranges…), lookups (**VLOOKUP / HLOOKUP / INDEX / MATCH**), SUMPRODUCT, COUNTBLANK, `$`-anchored refs, `&` concatenation, postfix `%`, TRUE/FALSE literals, and ~30 functions with error values (`#REF!`, `#N/A`, `#DIV/0!`, `#NAME?`) — all covered by unit tests (`npm test`).
 | 🖼️ **Slides** | 16:9 canvas, ribbon block insertion (title/text/shape/code/image), arrange (front/back), Design tab with background palette, deck sidebar, **fullscreen presenter view with stopwatch & speaker notes** |
 | 📝 **Forms** | Question builder (short/paragraph/multiple-choice/checkbox/linear scale), live preview, response tallying with bar charts |
-| 🗒️ **Keep** | Colored notes, pinning, checklists, search |
+| 🗒️ **Notes** | Colored notes, pinning, checklists, search |
 | 📅 **Calendar** | Month grid, event create/edit/delete, color coding, today highlight |
 | ⌨️ **Everywhere** | Command palette (`Ctrl/Cmd+K`), dark mode, debounced auto-save, status bar with system telemetry |
 
@@ -62,7 +62,7 @@ All conversion runs locally in the browser/webview — no file ever leaves your 
 │  │  ├─ Sheets         ├─ utils.ts     (md/csv/pdf helpers)  │  │
 │  │  ├─ Slides         ├─ tauri.ts     (IPC + fallbacks)     │  │
 │  │  ├─ Forms          └─ types.ts                           │  │
-│  │  ├─ Keep                                                 │  │
+│  │  ├─ Notes                                                 │  │
 │  │  └─ Calendar                                             │  │
 │  └──────────────────────────┬─────────────────────────────-─┘  │
 │                             │ invoke()                         │
@@ -187,7 +187,7 @@ simple-office-suite/
 | Docs | PDF (print pipeline), Markdown, plaintext, `.sos` JSON |
 | Sheets | CSV, `.sos` JSON, workbook JSON |
 | Slides | PDF handout (print pipeline), `.sos` JSON |
-| Forms / Keep / Calendar | `.sos` JSON |
+| Forms / Notes / Calendar | `.sos` JSON |
 
 `.sos` files are plain JSON — diff-friendly and trivially importable anywhere.
 

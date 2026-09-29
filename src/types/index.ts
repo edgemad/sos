@@ -6,7 +6,7 @@ export type ModuleId =
   | "sheets"
   | "slides"
   | "forms"
-  | "keep"
+  | "notes"
   | "calendar";
 
 export type DocKind = "document" | "spreadsheet" | "deck" | "form" | "note";
@@ -182,7 +182,7 @@ export interface FormResponse {
   answers: Record<string, string | string[] | number>;
 }
 
-// ── Keep ────────────────────────────────────────────────────────
+// ── Notes ────────────────────────────────────────────────────────
 
 export interface Note {
   id: string;

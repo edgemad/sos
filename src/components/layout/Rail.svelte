@@ -11,7 +11,7 @@
     sheets: "📊",
     slides: "🖼️",
     forms: "📝",
-    keep: "🗒️",
+    notes: "🗒️",
     calendar: "📅"
   };
 
@@ -21,11 +21,11 @@
     sheets: "Sheets",
     slides: "Slides",
     forms: "Forms",
-    keep: "Keep",
+    notes: "Notes",
     calendar: "Calendar"
   };
 
-  const modules: ModuleId[] = ["writer", "sheets", "slides", "forms", "keep", "calendar"];
+  const modules: ModuleId[] = ["writer", "sheets", "slides", "forms", "notes", "calendar"];
 
   $: recentDocs = $fileMetas
     .filter((f) => !f.trashed)

@@ -19,7 +19,7 @@
   import Sheets from "./components/sheets/Sheets.svelte";
   import Slides from "./components/slides/Slides.svelte";
   import Forms from "./components/forms/Forms.svelte";
-  import Keep from "./components/keep/Keep.svelte";
+  import Notes from "./components/notes/Notes.svelte";
   import Calendar from "./components/calendar/Calendar.svelte";
   import type { DocKind, ModuleId } from "./types";
 
@@ -36,7 +36,7 @@
     sheets: "#0f9d58",
     slides: "#f4b400",
     forms: "#7248b9",
-    keep: "#fbbc04",
+    notes: "#fbbc04",
     calendar: "#1967d2"
   };
   $: if (typeof document !== "undefined") {
@@ -253,8 +253,8 @@
         {/if}
       {:else if mod === "forms"}
         <Forms />
-      {:else if mod === "keep"}
-        <Keep />
+      {:else if mod === "notes"}
+        <Notes />
       {:else if mod === "calendar"}
         <Calendar />
       {/if}
