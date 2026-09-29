@@ -77,8 +77,10 @@ function safeGetItem(key: string): string | null {
 function safeSetItem(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    /* non-fatal */
+  } catch (e) {
+    // Quota exceeded is the one storage failure users can actually act on.
+    console.error("SOS: persist failed", e);
+    void import("./uiBridge").then((m) => m.toast("⚠️ Storage is full — export a backup (Settings ▸ Export all data) and delete old files."));
   }
 }
 

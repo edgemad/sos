@@ -8,7 +8,7 @@
   import type { CellValue } from "../../lib/formula";
   import type { SheetData, SheetTab, CellMeta, SheetChart } from "../../types";
   import { suggestFunctions } from "../../lib/formulaCatalog";
-  import { toCsv, parseCsv as csvParse, download, escapeHtml } from "../../lib/utils";
+  import { toCsv, parseCsv as csvParse, download, escapeHtml, printHtml } from "../../lib/utils";
   import { saveFileDialog } from "../../lib/tauri";
   import { exportXlsx, exportOds, exportJson, importXlsx, importOds, type SheetGrid } from "../../lib/converters";
   import SheetsMenubar from "./SheetsMenubar.svelte";
@@ -838,10 +838,7 @@
     const html = `<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font:11pt Arial">${grid
       .map((row) => `<tr>${row.map((v) => `<td>${escapeHtml(v)}</td>`).join("")}</tr>`)
       .join("")}</table>`;
-    const w = window.open("", "_blank", "width=900,height=1000");
-    if (!w) return;
-    w.document.write(`<!doctype html><html><head><title>${escapeHtml(file?.name ?? "Sheet")}</title></head><body>${html}<script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script></body></html>`);
-    w.document.close();
+    printHtml(file?.name ?? "Sheet", html);
   }
 
   // ── Stats strip ─────────────────────────────────────────────────

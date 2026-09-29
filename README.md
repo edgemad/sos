@@ -88,6 +88,21 @@ All conversion runs locally in the browser/webview — no file ever leaves your 
 
 ## 🚀 Getting started
 
+### Install (end users — no toolchain, no drivers)
+
+Download an installer from [Releases](https://github.com/edgemad/sos/releases) — everything the app needs ships inside the bundle. Tauri apps use the system's built-in web engine, so there are **no extra runtime drivers or runtimes to install**.
+
+| Platform | Download | Notes |
+|---|---|---|
+| **Windows 10/11** | `…_x64-setup.exe` | Per-user install — **no admin rights, no UAC prompt**. WebView2 ships with Windows 10/11; on the rare machine without it, the installer fetches it automatically. An `.msi` is also available for managed deployments. |
+| **macOS 10.15+** | `…_aarch64.dmg` (Apple Silicon) / `…_x64.dmg` (Intel) | Right-click ▸ Open on first launch (unsigned builds). WebKit is part of macOS. |
+| **Ubuntu / Debian** | `…_amd64.deb` | `sudo dpkg -i *.deb && sudo apt -f install` pulls 3–4 standard WebKitGTK libraries (no PPA, no external repo). |
+| **Fedora / openSUSE** | `…_x86_64.rpm` | Same engine libraries via your package manager. |
+| **Any Linux distro** | `…_amd64.AppImage` | **Zero install**: `chmod +x` and run. Bundles everything, works on glibc distros, ideal for locked-down machines. |
+| **Android 8+** | `…_aarch64.apk` | Sideload: enable "Install unknown apps" for your browser. The webview engine is part of Android itself. |
+
+Offline-first means no accounts, no sign-in, and no network checks at install or run time.
+
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) ≥ 18
@@ -180,7 +195,7 @@ simple-office-suite/
 
 - [ ] Real `.docx` / `.xlsx` / `.pptx` round-tripping (docx-rs + calamine on the Rust side)
 - [ ] Collaborative-style local comments & suggestions in Docs
-- [ ] Sheets: chart rendering from ranges, conditional formatting
+- [ ] Sheets: conditional formatting (floating charts shipped in v1.2.0)
 - [ ] Slides: image blocks from local disk, transitions
 - [ ] Optional offline "account" — encrypted local profiles
 

@@ -20,9 +20,9 @@ jobs:
           - platform: macos-latest
             args: "--target x86_64-apple-darwin"
           - platform: ubuntu-22.04
-            args: ""
+            args: "--bundles appimage,deb,rpm"
           - platform: windows-latest
-            args: ""
+            args: "--bundles msi,nsis"
           - platform: ubuntu-latest
             args: "--target aarch64-linux-android"
             android: true

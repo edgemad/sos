@@ -4,7 +4,7 @@
   // menu bar, formatting toolbar, document tabs + outline sidebar, canvas.
   import { openFile, updateContent, writerTabs, addWriterTab, selectWriterTab, renameWriterTab, deleteWriterTab, duplicateFile, trashFile, createFile, openInEditor } from "../../lib/state";
   import { countWords, htmlToMarkdown, htmlToText, escapeHtml, download, exportPdf } from "../../lib/utils";
-  import { saveFileDialog, openFileDialog } from "../../lib/tauri";
+  import { saveFileDialog, openFileDialog, openExternal } from "../../lib/tauri";
   import { appPrompt, toast } from "../../lib/uiBridge";
   import { exportDocx, exportOdt, exportHtml, exportMarkdown, exportTxt, importDocx, importOdt, importRtf, importMarkdown, importHtmlFile, importFilterFor } from "../../lib/converters";
   import type { WriterDoc, WriterSettings } from "../../types";
@@ -267,10 +267,10 @@
       case "tools:dictionary": {
         const sel = window.getSelection()?.toString().trim();
         if (sel) {
-          window.open(`https://www.google.com/search?q=define+${encodeURIComponent(sel)}`, "_blank");
+          void openExternal(`https://www.google.com/search?q=define+${encodeURIComponent(sel)}`);
         } else {
           void appPrompt("Look up:").then((q) => {
-            if (q) window.open(`https://www.google.com/search?q=define+${encodeURIComponent(q)}`, "_blank");
+            if (q) void openExternal(`https://www.google.com/search?q=define+${encodeURIComponent(q)}`);
           });
         }
         return;

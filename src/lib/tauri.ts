@@ -88,6 +88,24 @@ export async function writeFile(path: string, contents: string): Promise<boolean
   }
 }
 
+/**
+ * Open a URL with the OS browser. Inside Tauri, window.open to remote targets
+ * is unreliable/blocked, so we route through the opener plugin; browsers use
+ * a plain popup with noopener.
+ */
+export async function openExternal(url: string): Promise<void> {
+  const invoke = await getInvoke();
+  if (invoke) {
+    try {
+      await invoke("plugin:opener|open_url", { url });
+      return;
+    } catch {
+      /* fall through to window.open */
+    }
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export interface SystemInfoPayload {
   app_version: string;
   total_memory_mb: number;

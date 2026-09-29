@@ -7,7 +7,7 @@
   import { exportPdf, toCsv } from "./lib/utils";
   import { evaluateCell, displayValue, colToName } from "./lib/formula";
   import { saveFileDialog, writeFile } from "./lib/tauri";
-  import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, toast, type ToastMsg } from "./lib/uiBridge";
+  import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, toast, flushPendingToasts, type ToastMsg } from "./lib/uiBridge";
   import Header from "./components/layout/Header.svelte";
   import Rail from "./components/layout/Rail.svelte";
   import StatusBar from "./components/layout/StatusBar.svelte";
@@ -179,6 +179,16 @@
       if (r) setTimeout(() => askInputEl?.focus(), 30);
     });
     registerToastHost((t) => (toasts = t));
+    // Replay any toasts raised before this host mounted (early startup).
+    flushPendingToasts();
+  });
+  // Transient failures (IPC hiccup, disk full, bad import) surface as toasts,
+  // not the crash overlay — OnlyOffice-style: the app keeps running.
+  window.addEventListener("unhandledrejection", (e) => {
+    e.preventDefault();
+    const msg = e.reason instanceof Error ? e.reason.message : String(e.reason ?? "Something went wrong");
+    console.error("Unhandled rejection:", e.reason);
+    toast("⚠️ " + msg);
   });
   function onCrash(e: Event): void {
     crashed = String((e as ErrorEvent).message ?? "unknown error");
@@ -191,6 +201,9 @@
 </script>
 
 <svelte:window on:error={onCrash} />
+<!-- Svelte 4's own error boundary: catches render/update errors that never
+     reach window.onerror. Invisible; same recovery path as window errors. -->
+<span class="hidden" on:error={onCrash} />
 
 <!-- Liquid Glass ambient backdrop: slow aurora blobs behind translucent chrome -->
 <div class="sos-ambient" aria-hidden="true">

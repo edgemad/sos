@@ -80,13 +80,27 @@ export interface ToastMsg {
 let toasts: ToastMsg[] = [];
 let toastNotify: ((t: ToastMsg[]) => void) | null = null;
 let toastSeq = 0;
+let pending: string[] = [];
 
 export function registerToastHost(fn: ((t: ToastMsg[]) => void) | null): void {
   toastNotify = fn;
   if (toasts.length) fn?.(toasts);
 }
 
+/** Replay toasts queued before the host mounted (early startup errors). */
+export function flushPendingToasts(): void {
+  if (pending.length && toastNotify) {
+    for (const m of pending) toast(m);
+    pending = [];
+  }
+}
+
 export function toast(msg: string): void {
+  // No host yet (App.svelte not mounted): queue instead of dropping.
+  if (!toastNotify) {
+    pending = [...pending.slice(-4), msg];
+    return;
+  }
   const t = { id: ++toastSeq, msg };
   toasts = [...toasts, t];
   toastNotify?.(toasts);

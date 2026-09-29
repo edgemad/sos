@@ -133,21 +133,51 @@ export function toCsv(grid: string[][], delim = ","): string {
     .join("\n");
 }
 
-// ── PDF (via the browser print pipeline) ────────────────────────
+// ── Printing / PDF (via the engine's print pipeline) ───────────
 
-/** Open a print-ready window containing `html`; the user saves as PDF. */
-export function exportPdf(title: string, bodyHtml: string): void {
-  const w = window.open("", "_blank", "width=880,height=1000");
-  if (!w) return;
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8">
+let printFrame: HTMLIFrameElement | null = null;
+
+/**
+ * Render `bodyHtml` into a hidden iframe and invoke print. Unlike the old
+ * window.open("_blank") approach, this works inside Tauri's WKWebView /
+ * WebView2 where spawned popups can be silently blocked — one more step
+ * toward OnlyOffice-grade "it just works" reliability.
+ */
+export function printHtml(title: string, bodyHtml: string, extraCss = ""): void {
+  const doc = `<!doctype html><html><head><meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
   @page { margin: 22mm; }
   body { font: 12pt/1.7 Georgia, serif; color: #202124; }
   h1,h2,h3 { line-height: 1.25; }
   table { border-collapse: collapse; } td,th { border: 1px solid #bbb; padding: 4px 8px; }
-</style></head><body>${bodyHtml}
-<script>window.onload = () => setTimeout(() => window.print(), 250);</script>
-</body></html>`);
-  w.document.close();
+  ${extraCss}
+</style></head><body>${bodyHtml}</body></html>`;
+
+  // Reuse one hidden iframe; dropping the previous one avoids print races.
+  if (printFrame?.isConnected) printFrame.remove();
+  printFrame = document.createElement("iframe");
+  printFrame.setAttribute("aria-hidden", "true");
+  printFrame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(printFrame);
+  const win = printFrame.contentWindow;
+  if (!win) return;
+  win.document.open();
+  win.document.write(doc);
+  win.document.close();
+  const doPrint = (): void => {
+    try {
+      win.focus();
+      win.print();
+    } catch {
+      /* engine refused; nothing else we can do — content stays in the iframe */
+    }
+  };
+  if (win.document.readyState === "complete") setTimeout(doPrint, 150);
+  else win.onload = () => setTimeout(doPrint, 150);
+}
+
+/** Open a print-ready document containing `html`; the user saves as PDF. */
+export function exportPdf(title: string, bodyHtml: string): void {
+  printHtml(title, bodyHtml);
 }
