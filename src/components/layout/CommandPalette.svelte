@@ -1,6 +1,7 @@
 <script lang="ts">
   // Ctrl/Cmd+K command palette: navigate, create, open files.
   import { get } from "svelte/store";
+  import { rankIds, recordCommand, usage, type UsageMap } from "../../lib/adaptive";
   import { paletteOpen, fileMetas, createFile, openInEditor, activeModule, openFile } from "../../lib/state";
   import { settings } from "../../lib/settings";
   import { toast } from "../../lib/uiBridge";
@@ -18,14 +19,14 @@
   let query = "";
   let selectedIndex = 0;
 
-  $: commands = buildCommands($fileMetas, query, $settings.voiceEnabled);
+  $: commands = buildCommands($fileMetas, query, $settings.voiceEnabled, $usage);
   $: if ($paletteOpen) {
     query = "";
     selectedIndex = 0;
   }
   $: if (commands) selectedIndex = Math.min(selectedIndex, Math.max(0, commands.length - 1));
 
-  function buildCommands(metas: SosFileMeta[], q: string, voiceEnabled: boolean): Cmd[] {
+  function buildCommands(metas: SosFileMeta[], q: string, voiceEnabled: boolean, usageMap: UsageMap): Cmd[] {
     const cmds: Cmd[] = [];
     const nav: { m: ModuleId; label: string; icon: string }[] = [
       { m: "home", label: "Go to Home", icon: "🏠" },
@@ -75,12 +76,24 @@
           run: () => openInEditor(f.id)
         });
     }
-    // 16: nav + create + voice entries fit without crowding out file matches.
-    return cmds.slice(0, 16);
+    // Self-learning: rank by how often/recently you actually use commands,
+    // then cap the list (nav + create + voice + files fit in 16).
+    const byId = new Map(cmds.map((c) => [c.id, c] as const));
+    return rankIds(usageMap, cmds.map((c) => c.id), Date.now())
+      .map((id) => byId.get(id))
+      .filter((c): c is Cmd => !!c)
+      .slice(0, 16);
   }
 
   function matches(text: string, q: string): boolean {
     return !q || text.toLowerCase().includes(q.toLowerCase());
+  }
+
+  /** Record usage (self-learning) and run the command. */
+  function runCommand(cmd: Cmd | undefined): void {
+    if (!cmd) return;
+    recordCommand(cmd.id);
+    cmd.run();
   }
 
   /** Read the open document (or current selection) aloud via speech synthesis. */
@@ -124,7 +137,7 @@
       selectedIndex = Math.max(selectedIndex - 1, 0);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      commands[selectedIndex]?.run();
+      runCommand(commands[selectedIndex]);
       close();
     }
   }
@@ -144,7 +157,7 @@
           <button
             class="menu-item !items-center {i === selectedIndex ? 'bg-white/60 dark:bg-white/10' : ''}"
             on:mouseover={() => (selectedIndex = i)}
-            on:click={() => { cmd.run(); close(); }}
+            on:click={() => { runCommand(cmd); close(); }}
           >
             <span class="flex-1 truncate">{cmd.label}</span>
             <span class="text-xs text-gray-400">{cmd.hint}</span>

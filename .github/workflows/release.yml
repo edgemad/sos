@@ -60,4 +60,5 @@ jobs:
           releaseBody: "Offline-first office suite by Talia. All data stays on your machine."
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}

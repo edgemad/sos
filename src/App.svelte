@@ -6,7 +6,9 @@
   import { onNativeMenu } from "./lib/menuBridge";
   import { exportPdf, toCsv } from "./lib/utils";
   import { evaluateCell, displayValue, colToName } from "./lib/formula";
-  import { saveFileDialog, writeFile } from "./lib/tauri";
+  import { saveFileDialog, writeFile, openExternal } from "./lib/tauri";
+  import { checkForUpdates, type UpdateInfo } from "./lib/updates";
+  import { version as APP_VERSION } from "../package.json";
   import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, toast, flushPendingToasts, type ToastMsg } from "./lib/uiBridge";
   import Header from "./components/layout/Header.svelte";
   import Rail from "./components/layout/Rail.svelte";
@@ -161,7 +163,35 @@
         case "quit": window.close(); break;
       }
     });
+
+    // ── Self-update: silent checks shortly after startup and every 12 h;
+    // Help → Check for Updates (sos:check-updates) runs a manual one.
+    const startupCheck = setTimeout(() => { void checkForUpdates().then(announceUpdate); }, 8000);
+    const intervalCheck = setInterval(() => { void checkForUpdates().then(announceUpdate); }, 12 * 60 * 60 * 1000);
+    const onCheckUpdates = (): void => {
+      toast("Checking for updates…");
+      checkForUpdates(true)
+        .then((info) => {
+          if (info) {
+            toast(`Update available: v${info.version} — opening the download page…`);
+            openExternal(info.url);
+          } else {
+            toast(`You're up to date (v${APP_VERSION}).`);
+          }
+        })
+        .catch(() => toast("Couldn't check for updates — you appear to be offline."));
+    };
+    window.addEventListener("sos:check-updates", onCheckUpdates);
+    return () => {
+      clearTimeout(startupCheck);
+      clearInterval(intervalCheck);
+      window.removeEventListener("sos:check-updates", onCheckUpdates);
+    };
   });
+
+  function announceUpdate(info: UpdateInfo | null): void {
+    if (info) toast(`Update available: v${info.version} — use Help → Check for Updates to get it.`);
+  }
 
   void renameFile;
   void modLabel;

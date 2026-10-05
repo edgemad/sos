@@ -9,6 +9,7 @@
   import { get } from "svelte/store";
   import { settings as appSettings } from "../../lib/settings";
   import { createVoiceTyping, isSpeechRecognitionSupported, isSpeechSynthesisSupported, parseDictation, speak, stopSpeaking, isSpeaking, type VoiceTypingHandle } from "../../lib/voice";
+  import { recordCommand } from "../../lib/adaptive";
   import { exportDocx, exportOdt, exportHtml, exportMarkdown, exportTxt, importDocx, importOdt, importRtf, importMarkdown, importHtmlFile, importFilterFor } from "../../lib/converters";
   import type { WriterDoc, WriterSettings } from "../../types";
   import DocsMenubar from "./DocsMenubar.svelte";
@@ -238,6 +239,7 @@
   }
 
   function command(cmd: string, payload?: string): void {
+    recordCommand(cmd); // self-learning: remember what you actually use
     switch (cmd) {
       // File
       case "file:new": window.dispatchEvent(new CustomEvent("sos:new-doc")); return;
