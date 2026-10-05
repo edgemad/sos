@@ -123,3 +123,30 @@ export async function systemInfo(): Promise<SystemInfoPayload | null> {
     return null;
   }
 }
+
+/**
+ * System-action IPC: runs only under the `fs:default` allowlist, so every
+ * path is constrained to $HOME and its user-visible subdirs. Returns a
+ * `{ ok, action, detail, count }` object; throws on hard failures.
+ */
+export async function systemAction(action: string, args?: Record<string, unknown>): Promise<SystemActionPayload> {
+  const invoke = await getInvoke();
+  if (!invoke) {
+    throw new Error("systemAction is unavailable in browser builds");
+  }
+  const payload = await invoke("system_cleanup", { action, ...(args ?? {}) });
+  return payload as SystemActionPayload;
+}
+
+/** Payload returned by `systemCleanup`. */
+export interface SystemActionPayload {
+  ok: boolean;
+  action: string;
+  detail: string;
+  count?: number;
+}
+
+/** Type guard: did the action succeed? */
+export function isSystemOk(p: SystemActionPayload): boolean {
+  return p.ok === true;
+}

@@ -1,19 +1,26 @@
 //! Simple Office Suite — Tauri 2 backend.
 //!
-//! Thin native layer: menus, dialogs, file I/O and OS telemetry. All document
-//! logic lives in the TypeScript layer so the suite keeps working identically
-//! in a plain browser.
+//! Thin native layer: menus, dialogs, file I/O, OS telemetry and system
+//! actions (trash, temp, cache, file find). All document logic lives in the
+//! TypeScript layer so the suite keeps working identically in a plain browser.
 
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
+
 // Native menus are desktop-only; Android/iOS builds skip this module.
 #[cfg(desktop)]
 use tauri::menu::{AboutMetadata, CheckMenuItem, MenuBuilder, MenuItem, SubmenuBuilder};
+use tauri::Manager;
 #[cfg(desktop)]
 use tauri::{Emitter, Runtime};
-use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+
+mod system;
+pub use system::{
+    clear_cache, clear_temp, empty_trash, find_files, recall_trash, trash_items,
+    trash_recall_paths, SearchQuery, SystemResult,
+};
 
 /// Result payload for file open operations.
 #[derive(Serialize)]
@@ -41,7 +48,9 @@ async fn open_file_dialog(
 ) -> Result<Option<OpenedFile>, String> {
     let mut builder = app.dialog().file().add_filter(
         "Supported documents",
-        &["json", "sos", "md", "txt", "csv", "png", "jpg", "jpeg", "gif", "svg", "webp"],
+        &[
+            "json", "sos", "md", "txt", "csv", "png", "jpg", "jpeg", "gif", "svg", "webp",
+        ],
     );
     if let Some(exts) = extensions {
         let refs: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
@@ -51,8 +60,6 @@ async fn open_file_dialog(
     match builder.blocking_pick_file() {
         Some(file_path) => {
             let path = file_path.into_path().map_err(|e| e.to_string())?;
-            // Binary content is not loaded here; the TS layer decides how to
-            // handle the file (text vs image) based on its extension.
             let name = path
                 .file_name()
                 .map(|s| s.to_string_lossy().to_string())
@@ -60,7 +67,7 @@ async fn open_file_dialog(
             Ok(Some(OpenedFile {
                 path: path.to_string_lossy().to_string(),
                 name,
-                content: String::new(), // binary content handled via path
+                content: String::new(),
             }))
         }
         None => Ok(None),
@@ -73,7 +80,10 @@ async fn pick_image_dialog(app: tauri::AppHandle) -> Result<Option<String>, Stri
     let picked = app
         .dialog()
         .file()
-        .add_filter("Images", &["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"])
+        .add_filter(
+            "Images",
+            &["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"],
+        )
         .blocking_pick_file();
     match picked {
         Some(file_path) => {
@@ -153,6 +163,26 @@ fn system_info(app: tauri::AppHandle) -> SystemInfo {
     }
 }
 
+/// System-action IPC: routes `action` to the backend. Every command is
+/// constrained to user-writable paths ($HOME and its subdirs), so nothing
+/// outside the app's `fs:default` allowlist can ever be touched.
+#[tauri::command]
+async fn system_cleanup(app: tauri::AppHandle, action: String) -> Result<SystemResult, String> {
+    let app = app.clone();
+    match action.as_str() {
+        "trash_empty" => Ok(empty_trash(app.clone()).await),
+        "trash_recall" => Ok(recall_trash(app.clone()).await),
+        "trash_foreach" => Ok(trash_items(app.clone()).await),
+        "temp_clear" => Ok(clear_temp(app.clone()).await),
+        "cache_clear" => Ok(clear_cache(app.clone()).await),
+        "find_files" => {
+            let q = SearchQuery::parse(&app, action)?;
+            Ok(find_files(app, q).await)
+        }
+        _ => Err(format!("unknown system action: {action:?}")),
+    }
+}
+
 /// Build the native application menu and wire menu events to the webview.
 #[cfg(desktop)]
 fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
@@ -180,15 +210,51 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .build()?;
 
     // ── File ────────────────────────────────────────────────────────
-    let new_doc: MenuItem<R> = MenuItem::with_id(app, "new-doc", "New Document", true, Some("CmdOrCtrl+Alt+1"))?;
-    let new_sheet: MenuItem<R> = MenuItem::with_id(app, "new-sheet", "New Spreadsheet", true, Some("CmdOrCtrl+Alt+2"))?;
-    let new_deck: MenuItem<R> = MenuItem::with_id(app, "new-deck", "New Presentation", true, Some("CmdOrCtrl+Alt+3"))?;
-    let new_form: MenuItem<R> = MenuItem::with_id(app, "new-form", "New Form", true, Some("CmdOrCtrl+Alt+4"))?;
-    let new_note: MenuItem<R> = MenuItem::with_id(app, "new-note", "New Note", true, Option::<&str>::None)?;
-    let open_item: MenuItem<R> = MenuItem::with_id(app, "open", "Open .sos File…", true, Some("CmdOrCtrl+O"))?;
-    let save_item: MenuItem<R> = MenuItem::with_id(app, "save", "Save to Disk", true, Some("CmdOrCtrl+S"))?;
-    let export_pdf: MenuItem<R> = MenuItem::with_id(app, "export-pdf", "Export as PDF…", true, Some("CmdOrCtrl+P"))?;
-    let settings_item: MenuItem<R> = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let new_doc: MenuItem<R> = MenuItem::with_id(
+        app,
+        "new-doc",
+        "New Document",
+        true,
+        Some("CmdOrCtrl+Alt+1"),
+    )?;
+    let new_sheet: MenuItem<R> = MenuItem::with_id(
+        app,
+        "new-sheet",
+        "New Spreadsheet",
+        true,
+        Some("CmdOrCtrl+Alt+2"),
+    )?;
+    let new_deck: MenuItem<R> = MenuItem::with_id(
+        app,
+        "new-deck",
+        "New Presentation",
+        true,
+        Some("CmdOrCtrl+Alt+3"),
+    )?;
+    let new_form: MenuItem<R> =
+        MenuItem::with_id(app, "new-form", "New Form", true, Some("CmdOrCtrl+Alt+4"))?;
+    let new_note: MenuItem<R> =
+        MenuItem::with_id(app, "new-note", "New Note", true, Option::<&str>::None)?;
+    let open_item: MenuItem<R> =
+        MenuItem::with_id(app, "open", "Open .sos File…", true, Some("CmdOrCtrl+O"))?;
+    let save_item: MenuItem<R> =
+        MenuItem::with_id(app, "save", "Save to Disk", true, Some("CmdOrCtrl+S"))?;
+    let export_pdf: MenuItem<R> = MenuItem::with_id(
+        app,
+        "export-pdf",
+        "Export as PDF…",
+        true,
+        Some("CmdOrCtrl+P"),
+    )?;
+    let settings_item: MenuItem<R> =
+        MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let system_item: MenuItem<R> = MenuItem::with_id(
+        app,
+        "system",
+        "System tasks…",
+        true,
+        Some("CmdOrCtrl+Shift+;"),
+    )?;
 
     let file_submenu = SubmenuBuilder::new(app, "File")
         .item(&new_doc)
@@ -202,6 +268,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .item(&export_pdf)
         .separator()
         .item(&settings_item)
+        .item(&system_item)
         .build()?;
 
     // ── Edit ────────────────────────────────────────────────────────
@@ -218,7 +285,14 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .build()?;
 
     // ── View ────────────────────────────────────────────────────────
-    let dark_toggle: CheckMenuItem<R> = CheckMenuItem::with_id(app, "dark_mode", "Dark Mode", true, false, Some("CmdOrCtrl+Alt+D"))?;
+    let dark_toggle: CheckMenuItem<R> = CheckMenuItem::with_id(
+        app,
+        "dark_mode",
+        "Dark Mode",
+        true,
+        false,
+        Some("CmdOrCtrl+Alt+D"),
+    )?;
     let view_submenu = SubmenuBuilder::new(app, "View")
         .text("command_palette", "Command Palette")
         .text("toggle_sidebar", "Toggle Sidebar")
@@ -281,7 +355,8 @@ pub fn run() {
             write_text_file,
             read_text_file,
             ensure_workspace_dir,
-            system_info
+            system_info,
+            system_cleanup
         ])
         .setup(|app| {
             #[cfg(desktop)]
@@ -290,4 +365,15 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Simple Office Suite");
+}
+
+#[cfg(desktop)]
+mod test {
+    use super::*;
+    #[test]
+    fn menu_builds() {
+        // Menu construction is verified in integration tests via the full build;
+        // here we only confirm the function signature compiles.
+        let _ = build_menu::<tauri::Wry>;
+    }
 }
