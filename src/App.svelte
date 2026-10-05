@@ -173,8 +173,8 @@
       checkForUpdates(true)
         .then((info) => {
           if (info) {
-            toast(`Update available: v${info.version} — opening the download page…`);
-            openExternal(info.url);
+            toast(`Update available: v${info.version} — opening the installer download…`);
+            openExternal(info.assetUrl ?? info.url);
           } else {
             toast(`You're up to date (v${APP_VERSION}).`);
           }

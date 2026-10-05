@@ -13,6 +13,8 @@ const REPO = "edgemad/sos";
 export interface UpdateInfo {
   version: string;
   url: string;
+  /** Direct download for this platform's installer, when one exists. */
+  assetUrl: string | null;
   title: string | null;
 }
 
@@ -38,6 +40,59 @@ export function isNewerVersion(current: string, latest: string): boolean {
   return false;
 }
 
+// ── Platform/asset matching (pure, unit-tested) ───────────────────────
+
+export type SosPlatform = "darwin" | "win32" | "linux";
+export type SosArch = "aarch64" | "x86_64";
+
+export interface ReleaseAsset {
+  name: string;
+  url: string;
+}
+
+/** Pick the release asset that installs on the running platform.
+ *  macOS: prefers the aarch64 dmg (WKWebView's UA cannot distinguish the
+ *  arch, so this is the pragmatic default on modern Macs). Windows: the
+ *  NSIS setup exe, falling back to the msi. Linux: AppImage, then deb. */
+export function pickAssetForPlatform(
+  assets: readonly ReleaseAsset[],
+  platform: SosPlatform,
+  arch: SosArch
+): string | null {
+  const first = (...res: RegExp[]): string | null => {
+    for (const re of res) {
+      const hit = assets.find((a) => re.test(a.name));
+      if (hit) return hit.url;
+    }
+    return null;
+  };
+  switch (platform) {
+    case "darwin":
+      return arch === "aarch64"
+        ? first(/aarch64.*\.dmg$/i, /arm64.*\.dmg$/i, /x64.*\.dmg$/i)
+        : first(/x64.*\.dmg$/i, /x86_64.*\.dmg$/i, /aarch64.*\.dmg$/i);
+    case "win32":
+      return first(/x64.*setup\.exe$/i, /x64.*\.msi$/i, /\.exe$/i, /\.msi$/i);
+    case "linux":
+      return first(/amd64.*\.AppImage$/i, /amd64.*\.deb$/i, /\.AppImage$/i, /\.deb$/i, /\.rpm$/i);
+  }
+}
+
+/** Coarse platform detection inside the webview. */
+export function detectPlatform(ua: string = navigator.userAgent): SosPlatform {
+  if (/Mac|iPhone|iPad/i.test(ua)) return "darwin";
+  if (/Win/i.test(ua)) return "win32";
+  return "linux";
+}
+
+/** Best-effort arch detection; defaults to x86_64 (and darwin callers fall
+ *  back sensibly since the UA cannot reveal the Apple Silicon arch). */
+export function detectArch(ua: string = navigator.userAgent, platform: SosPlatform = detectPlatform(ua)): SosArch {
+  if (/arm|aarch64/i.test(ua)) return "aarch64";
+  if (platform === "darwin" && /Chrome/i.test(ua)) return "aarch64"; // heuristic
+  return "x86_64";
+}
+
 /** Query the GitHub Releases API for the latest published release.
  *  - Background checks (`manual: false`) fail silently (offline, rate limit).
  *  - Manual checks rethrow so the caller can explain what went wrong. */
@@ -48,12 +103,21 @@ export async function checkForUpdates(manual = false): Promise<UpdateInfo | null
     });
     if (res.status === 404) return null; // no published releases yet
     if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
-    const data = (await res.json()) as { tag_name?: string; html_url?: string; name?: string };
+    const data = (await res.json()) as {
+      tag_name?: string;
+      html_url?: string;
+      name?: string;
+      assets?: { name?: string; browser_download_url?: string }[];
+    };
     const latest = (data.tag_name ?? "").replace(/^v/, "");
     if (!latest || !isNewerVersion(APP_VERSION, latest)) return null;
+    const assets = (data.assets ?? [])
+      .map((a) => ({ name: a.name ?? "", url: a.browser_download_url ?? "" }))
+      .filter((a) => a.name && a.url);
     const info: UpdateInfo = {
       version: latest,
       url: data.html_url ?? `https://github.com/${REPO}/releases`,
+      assetUrl: pickAssetForPlatform(assets, detectPlatform(), detectArch()),
       title: data.name ?? null
     };
     updateAvailable.set(info);

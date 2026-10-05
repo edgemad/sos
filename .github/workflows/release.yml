@@ -1,8 +1,9 @@
 name: "Release build (all platforms)"
 
-# Builds and drafts a GitHub release with installers for every platform:
-# macOS (Apple Silicon + Intel .dmg), Windows (.msi/.exe) and Linux
-# (.deb/.AppImage/.rpm). Triggered by pushing a v* tag, or manually.
+# Builds and publishes a GitHub release with installers for every platform:
+# macOS (Apple Silicon + Intel .dmg), Windows (.msi/.exe), Linux
+# (.deb/.AppImage/.rpm) and Android (.apk). Triggered by pushing a v* tag,
+# or manually. Releases are published automatically — a tag ships.
 
 on:
   workflow_dispatch:
@@ -50,7 +51,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Build and draft release
+      - name: Build and upload release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -58,7 +59,62 @@ jobs:
           tagName: v__VERSION__
           releaseName: "Simple Office Suite v__VERSION__"
           releaseBody: "Offline-first office suite by Talia. All data stays on your machine."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  android-apk:
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    needs: publish-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Ensure Android NDK
+        run: |
+          ndk_version=$(ls $ANDROID_HOME/ndk 2>/dev/null | tail -1 || true)
+          if [ -z "$ndk_version" ]; then
+            yes | sdkmanager --licenses > /dev/null || true
+            sdkmanager "ndk;26.1.10909125" > /dev/null
+            ndk_version=26.1.10909125
+          fi
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$ndk_version" >> $GITHUB_ENV
+
+      - name: Build signed APK (debug key)
+        run: |
+          npx tauri android init
+          npx tauri android build --apk --target aarch64
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort | tail -1)
+          "$APKSIGNER" sign \
+            --ks ~/.android/debug.keystore --ks-pass pass:android --key-pass pass:android \
+            --out Simple.Office.Suite_${GITHUB_REF_NAME#v}_aarch64.apk \
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+          "$APKSIGNER" verify Simple.Office.Suite_${GITHUB_REF_NAME#v}_aarch64.apk
+
+      - name: Upload APK to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: Simple.Office.Suite_*_aarch64.apk

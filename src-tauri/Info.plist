@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- Merged automatically by Tauri (an Info.plist beside tauri.conf.json
+         is merged into the bundle). Required so macOS shows a proper
+         permission dialog instead of silently denying the microphone used
+         by voice typing and the voice orb. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Talia uses the microphone for voice typing and live voice feedback. Audio is processed by the operating system's speech engine and never leaves your machine.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Talia uses speech recognition to turn your dictation into text on this device.</string>
+  </dict>
+</plist>
