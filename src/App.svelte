@@ -14,6 +14,7 @@
   import EmptyState from "./components/layout/EmptyState.svelte";
   import CommandPalette from "./components/layout/CommandPalette.svelte";
   import SettingsModal from "./components/layout/SettingsModal.svelte";
+  import VoiceOrb from "./components/layout/VoiceOrb.svelte";
   import Home from "./components/home/Home.svelte";
   import Writer from "./components/writer/Writer.svelte";
   import Sheets from "./components/sheets/Sheets.svelte";
@@ -264,6 +265,9 @@
   </div>
 
   <StatusBar />
+
+  <!-- Jarvis-style voice orb: appears while Talia is listening or speaking -->
+  <VoiceOrb />
 
   {#if settingsOpen}
     <SettingsModal on:close={() => (settingsOpen = false)} />

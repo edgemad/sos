@@ -1,5 +1,6 @@
 // App settings: persisted preferences surfaced in the Settings modal and
-// native menu. Syncs theme, autosave cadence, editor font and default zoom.
+// native menu. Syncs theme, autosave cadence, editor font, default zoom and
+// voice (read-aloud) preferences.
 
 import { writable } from "svelte/store";
 
@@ -11,6 +12,9 @@ export interface SosSettings {
   defaultZoom: number;
   showStatusBar: boolean;
   defaultDocsZoom: number;
+  voiceEnabled: boolean;
+  voiceRate: number;
+  voiceName: string;
 }
 
 const KEY = "sos.settings.v1";
@@ -22,7 +26,10 @@ const defaults: SosSettings = {
   editorFontSize: 14,
   defaultZoom: 100,
   showStatusBar: true,
-  defaultDocsZoom: 100
+  defaultDocsZoom: 100,
+  voiceEnabled: true,
+  voiceRate: 1,
+  voiceName: ""
 };
 
 function load(): SosSettings {

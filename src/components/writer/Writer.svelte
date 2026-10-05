@@ -6,6 +6,9 @@
   import { countWords, htmlToMarkdown, htmlToText, escapeHtml, download, exportPdf } from "../../lib/utils";
   import { saveFileDialog, openFileDialog, openExternal } from "../../lib/tauri";
   import { appPrompt, toast } from "../../lib/uiBridge";
+  import { get } from "svelte/store";
+  import { settings as appSettings } from "../../lib/settings";
+  import { createVoiceTyping, isSpeechRecognitionSupported, isSpeechSynthesisSupported, parseDictation, speak, stopSpeaking, isSpeaking, type VoiceTypingHandle } from "../../lib/voice";
   import { exportDocx, exportOdt, exportHtml, exportMarkdown, exportTxt, importDocx, importOdt, importRtf, importMarkdown, importHtmlFile, importFilterFor } from "../../lib/converters";
   import type { WriterDoc, WriterSettings } from "../../types";
   import DocsMenubar from "./DocsMenubar.svelte";
@@ -147,37 +150,85 @@
   const EMOJIS = ["😀","😅","😊","😍","🤔","👍","👏","🙏","💪","🔥","✅","❌","⭐","❤️","🎉","🚀","💡","📌","📎","🗓️","📊","📈","💼","✉️","☎️","🕐","🌎","🍎","☕","🍕"];
   const SPECIALS = ["©","®","™","§","¶","†","‡","•","·","…","—","–","«","»","‹","›","„","“","”","‘","’","≤","≥","≠","≈","±","×","÷","°","µ","∞","√","∑","π","Ω","€","£","¥","¢","←","→","↑","↓","↔","⇒","∀","∂","∃","∅","∈","∉","⊂","∪","∩"];
 
-  // ── Voice typing (Web Speech API, works offline on macOS/WKWebView) ──
+  // ── Voice: typing (Web Speech recognition) + read-aloud (synthesis) ──
 
   let voiceActive = false;
-  let recognition: any = null;
+  let voiceTyping: VoiceTypingHandle | null = null;
 
   function toggleVoice(): void {
     if (voiceActive) {
-      recognition?.stop();
+      voiceTyping?.stop();
       voiceActive = false;
       return;
     }
-    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!SR) {
+    if (!$appSettings.voiceEnabled) {
+      toast("Voice is turned off — enable it in Settings.");
+      return;
+    }
+    if (!isSpeechRecognitionSupported()) {
       toast("Voice typing needs the Web Speech API — available in the desktop app and Chrome.");
       return;
     }
-    recognition = new SR();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = navigator.language || "en-US";
-    recognition.onresult = (e: any) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          const text = e.results[i][0].transcript.trim();
-          canvasApi?.exec("insertHTML", escapeHtml(text) + " ");
+    voiceTyping = createVoiceTyping({
+      onFinal: (text) => {
+        const cmd = parseDictation(text);
+        if (cmd.action === "stop") {
+          voiceTyping?.stop();
+          toast("Voice typing off.");
+          // Spoken ack — small Jarvis touch.
+          speak("Going quiet.", { rate: $appSettings.voiceRate, voiceName: $appSettings.voiceName || undefined });
+          return;
         }
-      }
-    };
-    recognition.onend = () => (voiceActive = false);
-    recognition.start();
+        if (cmd.action === "newline") {
+          canvasApi?.exec("insertHTML", "<br><br>");
+          return;
+        }
+        if (cmd.text) canvasApi?.exec("insertHTML", escapeHtml(cmd.text) + " ");
+      },
+      onStateChange: (active) => (voiceActive = active),
+      onError: (err) => toast("Voice typing error: " + err),
+      continuous: true
+    });
+    if (!voiceTyping) {
+      toast("Voice typing is unavailable on this device.");
+      return;
+    }
+    voiceTyping.start();
     voiceActive = true;
+  }
+
+  /** Read the current selection (or the whole document) aloud. */
+  function readAloud(): void {
+    if (!$appSettings.voiceEnabled) {
+      toast("Voice is turned off — enable it in Settings.");
+      return;
+    }
+    if (!isSpeechSynthesisSupported()) {
+      toast("Read aloud needs speech synthesis — available in the desktop app and Chrome.");
+      return;
+    }
+    if (!doc) return;
+    const sel = window.getSelection()?.toString().trim();
+    const text = sel || htmlToText(doc.html);
+    if (!text.trim()) {
+      toast("Nothing to read — the document is empty.");
+      return;
+    }
+    const ok = speak(text, {
+      rate: $appSettings.voiceRate,
+      voiceName: $appSettings.voiceName || undefined,
+      lang: navigator.language || "en-US"
+    });
+    toast(ok ? (sel ? "Reading the selection aloud…" : "Reading the document aloud…") : "Speech synthesis is unavailable on this device.");
+  }
+
+  function stopReadAloud(): void {
+    if (get(isSpeaking)) {
+      stopSpeaking();
+      toast("Stopped reading aloud.");
+    } else {
+      toast("Nothing is being read aloud.");
+    }
   }
 
   // ── Command routing ─────────────────────────────────────────────
@@ -264,6 +315,8 @@
       case "tools:wordcount": dialog = "wordcount"; return;
       case "tools:spell": toast("Spelling check runs automatically as you type (spellcheck=true)."); return;
       case "tools:voice": toggleVoice(); return;
+      case "tools:speak": readAloud(); return;
+      case "tools:stop-speech": stopReadAloud(); return;
       case "tools:dictionary": {
         const sel = window.getSelection()?.toString().trim();
         if (sel) {
@@ -313,6 +366,9 @@
   }
 
   async function onMenuCmd(d: { cmd: string; payload?: string }): Promise<void> {
+    // Stamp the shared debounce so DocsMenubar's synchronous onCmd call
+    // suppresses its own echoed "sos-cmd-writer" event (commands ran twice).
+    lastCmdAt = performance.now();
     command(d.cmd, d.payload);
   }
 
@@ -442,6 +498,8 @@
     window.removeEventListener("sos-cmd-writer", onWindowCmd);
     window.removeEventListener("sos:undo-request", onUndoRequest);
     window.removeEventListener("sos:redo-request", onRedoRequest);
+    voiceTyping?.stop();
+    stopSpeaking();
   });
 </script>
 

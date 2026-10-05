@@ -5,6 +5,7 @@
   import { systemInfo, isTauri } from "../../lib/tauri";
   import type { SystemInfoPayload } from "../../lib/tauri";
   import { countWords, htmlToText } from "../../lib/utils";
+  import { isSpeaking, isListening, stopSpeaking } from "../../lib/voice";
 
   let info: SystemInfoPayload | null = null;
 
@@ -44,6 +45,12 @@
 
 <footer class="h-7 shrink-0 flex items-center gap-4 px-3 text-xs text-gray-500 dark:text-gray-400 glass-bar border-t border-white/40 dark:border-white/10">
   <span>{moduleHint[$activeModule] ?? ""}</span>
+  {#if $isListening}
+    <span class="!text-docs font-medium animate-pulse" title="Voice typing is active">🎙 Listening</span>
+  {/if}
+  {#if $isSpeaking}
+    <button class="!text-docs font-medium hover:underline" title="Reading aloud — click to stop" on:click={() => stopSpeaking()}>🔊 Speaking</button>
+  {/if}
   <span class="flex-1" />
   {#if file?.kind === "document"}
     <span>{words} words</span>

@@ -2,11 +2,32 @@
   // Settings modal — opened from the native menu or the header gear.
   import { get } from "svelte/store";
   import { settings, resetSettings } from "../../lib/settings";
+  import { speechVoices, isSpeechSynthesisSupported, speak, stopSpeaking } from "../../lib/voice";
   import { state, darkMode } from "../../lib/state";
   import { saveFileDialog } from "../../lib/tauri";
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount, onDestroy } from "svelte";
 
   const dispatch = createEventDispatcher<{ close: void }>();
+
+  // ── Voice (Web Speech synthesis) ────────────────────────────────
+  const speechAvailable = isSpeechSynthesisSupported();
+  let voices: { name: string; lang: string }[] = [];
+  let unsubscribeVoices: (() => void) | null = null;
+  onMount(() => {
+    unsubscribeVoices = speechVoices.subscribe((v) => (voices = v));
+  });
+  onDestroy(() => {
+    unsubscribeVoices?.();
+    stopSpeaking();
+  });
+  function testVoice(): void {
+    stopSpeaking();
+    const s = get(settings);
+    speak("Voice is ready. This is Simple Office Suite reading with your selected settings.", {
+      rate: s.voiceRate,
+      voiceName: s.voiceName || undefined
+    });
+  }
 
   const fonts = [
     { label: "System UI", value: "'Segoe UI', system-ui, -apple-system, sans-serif" },
@@ -63,6 +84,35 @@
             <input type="range" min="11" max="22" value={$settings.editorFontSize} on:input={(e) => settings.update((s) => ({ ...s, editorFontSize: parseInt(inputText(e), 10) }))} />
           </label>
         </div>
+      </section>
+
+      <!-- Voice -->
+      <section>
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Voice</h3>
+        <label class="flex items-center justify-between text-sm">
+          <span>Enable voice features</span>
+          <input type="checkbox" checked={$settings.voiceEnabled} on:change={(e) => settings.update((s) => ({ ...s, voiceEnabled: checkboxValue(e) }))} />
+        </label>
+        <div class="grid grid-cols-2 gap-3 mt-2">
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="text-gray-500 text-xs">Reading speed: {$settings.voiceRate.toFixed(1)}×</span>
+            <input type="range" min="0.5" max="2" step="0.1" value={$settings.voiceRate} on:input={(e) => settings.update((s) => ({ ...s, voiceRate: parseFloat(inputText(e)) || 1 }))} />
+          </label>
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="text-gray-500 text-xs">Voice</span>
+            <select class="input" value={$settings.voiceName} on:change={(e) => settings.update((s) => ({ ...s, voiceName: selectValue(e) }))}>
+              <option value="">Automatic</option>
+              {#each voices as v (v.name)}
+                <option value={v.name}>{v.name} ({v.lang})</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+        {#if !speechAvailable}
+          <p class="text-xs text-gray-400 mt-2">Speech synthesis is not available in this environment.</p>
+        {:else}
+          <button class="btn btn-ghost border border-gray-300 dark:border-gray-600 text-xs mt-3" on:click={testVoice}>▶ Test voice</button>
+        {/if}
       </section>
 
       <!-- Autosave -->

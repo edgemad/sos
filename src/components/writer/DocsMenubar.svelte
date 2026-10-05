@@ -145,6 +145,8 @@
         { id: "tools:find", label: "Find and replace", shortcut: "⌘F" },
         { id: "sep-t1", label: "", sep: true },
         { id: "tools:voice", label: "Voice typing" },
+        { id: "tools:speak", label: "Read aloud" },
+        { id: "tools:stop-speech", label: "Stop reading aloud" },
         { id: "tools:dictionary", label: "Dictionary" },
         { id: "sep-t2", label: "", sep: true },
         { id: "tools:preferences", label: "Preferences…" },

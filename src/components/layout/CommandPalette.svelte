@@ -1,6 +1,11 @@
 <script lang="ts">
   // Ctrl/Cmd+K command palette: navigate, create, open files.
-  import { paletteOpen, fileMetas, createFile, openInEditor, activeModule } from "../../lib/state";
+  import { get } from "svelte/store";
+  import { paletteOpen, fileMetas, createFile, openInEditor, activeModule, openFile } from "../../lib/state";
+  import { settings } from "../../lib/settings";
+  import { toast } from "../../lib/uiBridge";
+  import { speak, stopSpeaking, isSpeechSynthesisSupported } from "../../lib/voice";
+  import { htmlToText } from "../../lib/utils";
   import type { ModuleId, SosFileMeta } from "../../types";
 
   interface Cmd {
@@ -13,14 +18,14 @@
   let query = "";
   let selectedIndex = 0;
 
-  $: commands = buildCommands($fileMetas, query);
+  $: commands = buildCommands($fileMetas, query, $settings.voiceEnabled);
   $: if ($paletteOpen) {
     query = "";
     selectedIndex = 0;
   }
   $: if (commands) selectedIndex = Math.min(selectedIndex, Math.max(0, commands.length - 1));
 
-  function buildCommands(metas: SosFileMeta[], q: string): Cmd[] {
+  function buildCommands(metas: SosFileMeta[], q: string, voiceEnabled: boolean): Cmd[] {
     const cmds: Cmd[] = [];
     const nav: { m: ModuleId; label: string; icon: string }[] = [
       { m: "home", label: "Go to Home", icon: "🏠" },
@@ -45,6 +50,22 @@
       if (matches(c.label, q))
         cmds.push({ id: "new-" + c.kind, label: c.label, hint: "Create", run: () => createFile(c.kind) });
     }
+    const voice: Cmd[] = [
+      { id: "voice-read", label: "Read document aloud", hint: "Voice", run: readAloud },
+      { id: "voice-stop", label: "Stop reading aloud", hint: "Voice", run: () => { stopSpeaking(); toast("Stopped reading aloud."); } },
+      {
+        id: "voice-toggle",
+        label: voiceEnabled ? "Turn voice features off" : "Turn voice features on",
+        hint: "Voice",
+        run: () => {
+          settings.update((s) => ({ ...s, voiceEnabled: !s.voiceEnabled }));
+          toast(voiceEnabled ? "Voice features off" : "Voice features on");
+        }
+      }
+    ];
+    for (const c of voice) {
+      if (matches(c.label, q)) cmds.push(c);
+    }
     for (const f of metas.filter((f) => !f.trashed)) {
       if (matches(f.name, q))
         cmds.push({
@@ -54,11 +75,39 @@
           run: () => openInEditor(f.id)
         });
     }
-    return cmds.slice(0, 12);
+    // 16: nav + create + voice entries fit without crowding out file matches.
+    return cmds.slice(0, 16);
   }
 
   function matches(text: string, q: string): boolean {
     return !q || text.toLowerCase().includes(q.toLowerCase());
+  }
+
+  /** Read the open document (or current selection) aloud via speech synthesis. */
+  function readAloud(): void {
+    const s = get(settings);
+    if (!s.voiceEnabled) {
+      toast("Voice is turned off — enable it in Settings.");
+      return;
+    }
+    if (!isSpeechSynthesisSupported()) {
+      toast("Speech synthesis is not available in this environment.");
+      return;
+    }
+    const f = get(openFile);
+    if (f?.kind !== "document") {
+      toast("Open a document first — read aloud works in Docs.");
+      return;
+    }
+    const html = (f.content as { html: string }).html;
+    const sel = window.getSelection()?.toString().trim();
+    const text = sel || htmlToText(html);
+    if (!text.trim()) {
+      toast("Nothing to read — the document is empty.");
+      return;
+    }
+    const ok = speak(text, { rate: s.voiceRate, voiceName: s.voiceName || undefined });
+    toast(ok ? "Reading the document aloud…" : "Speech synthesis is unavailable on this device.");
   }
 
   function close(): void {
