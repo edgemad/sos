@@ -125,10 +125,14 @@ jobs:
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
           "$APKSIGNER" verify Simple.Office.Suite_${GITHUB_REF_NAME#v}_aarch64.apk
 
-      - name: Upload APK to the release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          files: Simple.Office.Suite_*_aarch64.apk
+          name: android-apk
+          path: Simple.Office.Suite_*_aarch64.apk
+          if-no-files-found: error
+
+      - name: Attach APK to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" Simple.Office.Suite_*_aarch64.apk --clobber
