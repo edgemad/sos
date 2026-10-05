@@ -256,18 +256,18 @@ pub async fn empty_trash(app: tauri::AppHandle) -> SystemResult {
     )
 }
 
+// Non-macOS fallback: the Trash lives outside $HOME on Linux/Windows, which
+// the $HOME allowlist deliberately never touches — report gracefully instead.
+// (This was previously duplicated under the same cfg — a hard compile error
+// on Linux/Windows; macOS never saw it, which is why CI failed but local
+// checks passed.)
 #[cfg(not(target_os = "macos"))]
-pub async fn empty_trash_unix(app: tauri::AppHandle) -> SystemResult {
+pub async fn empty_trash(_app: tauri::AppHandle) -> SystemResult {
     SystemResult::success("trash_empty", "Trash management is macOS-only", 0)
 }
 
 pub async fn recall_trash(app: tauri::AppHandle) -> SystemResult {
     empty_trash(app).await
-}
-
-#[cfg(not(target_os = "macos"))]
-pub async fn empty_trash_unix(app: tauri::AppHandle) -> SystemResult {
-    SystemResult::success("trash_empty", "Trash management is macOS-only", 0)
 }
 
 pub async fn trash_recall_paths(app: tauri::AppHandle, rel: String) -> SystemResult {
