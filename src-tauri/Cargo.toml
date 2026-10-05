@@ -1,6 +1,6 @@
 [package]
 name = "simple-office-suite"
-version = "1.4.0"
+version = "1.4.1"
 description = "A complete offline-first, Google Workspace-style office suite: Docs, Sheets, Slides, Forms, Notes and Calendar. Developed by Talia."
 authors = ["Talia", "Simple Office Suite Contributors"]
 license = "MIT"
