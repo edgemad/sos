@@ -46,6 +46,7 @@ export async function checkForUpdates(manual = false): Promise<UpdateInfo | null
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
       headers: { Accept: "application/vnd.github+json" }
     });
+    if (res.status === 404) return null; // no published releases yet
     if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
     const data = (await res.json()) as { tag_name?: string; html_url?: string; name?: string };
     const latest = (data.tag_name ?? "").replace(/^v/, "");

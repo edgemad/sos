@@ -1,7 +1,7 @@
 // Unit tests for the self-update version comparison.
 
-import { describe, expect, it } from "vitest";
-import { isNewerVersion } from "../updates";
+import { describe, expect, it, vi } from "vitest";
+import { checkForUpdates, isNewerVersion } from "../updates";
 
 describe("isNewerVersion", () => {
   it("detects higher versions", () => {
@@ -24,5 +24,19 @@ describe("isNewerVersion", () => {
   it("treats prerelease tags as their base version", () => {
     expect(isNewerVersion("1.4.0", "1.5.0-beta.1")).toBe(true);
     expect(isNewerVersion("1.5.0", "1.5.0-beta.1")).toBe(false);
+  });
+});
+
+describe("checkForUpdates", () => {
+  it("treats a missing release (404) as up-to-date, even for manual checks", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(checkForUpdates(true)).resolves.toBeNull();
+      await expect(checkForUpdates()).resolves.toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
