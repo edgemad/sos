@@ -104,6 +104,14 @@ jobs:
 
       - name: Build signed APK (debug key)
         run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore ~/.android/debug.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
           npx tauri android init
           npx tauri android build --apk --target aarch64
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort | tail -1)
