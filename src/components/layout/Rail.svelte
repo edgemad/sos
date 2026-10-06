@@ -12,7 +12,8 @@
     slides: "🖼️",
     forms: "📝",
     notes: "🗒️",
-    calendar: "📅"
+    calendar: "📅",
+    arcade: "🕹️"
   };
 
   const moduleLabel: Record<ModuleId, string> = {
@@ -22,10 +23,11 @@
     slides: "Slides",
     forms: "Forms",
     notes: "Notes",
-    calendar: "Calendar"
+    calendar: "Calendar",
+    arcade: "Arcade"
   };
 
-  const modules: ModuleId[] = ["writer", "sheets", "slides", "forms", "notes", "calendar"];
+  const modules: ModuleId[] = ["writer", "sheets", "slides", "forms", "notes", "calendar", "arcade"];
 
   $: recentDocs = $fileMetas
     .filter((f) => !f.trashed)

@@ -7,7 +7,8 @@ export type ModuleId =
   | "slides"
   | "forms"
   | "notes"
-  | "calendar";
+  | "calendar"
+  | "arcade";
 
 export type DocKind = "document" | "spreadsheet" | "deck" | "form" | "note";
 

@@ -8,6 +8,8 @@
   import { evaluateCell, displayValue, colToName } from "./lib/formula";
   import { saveFileDialog, writeFile, openExternal } from "./lib/tauri";
   import { checkForUpdates, type UpdateInfo } from "./lib/updates";
+  import { settings } from "./lib/settings";
+  import { ackPhrase, isSpeechSynthesisSupported, isListening, speakTalia } from "./lib/voice";
   import { version as APP_VERSION } from "../package.json";
   import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, toast, flushPendingToasts, type ToastMsg } from "./lib/uiBridge";
   import Header from "./components/layout/Header.svelte";
@@ -24,6 +26,7 @@
   import Forms from "./components/forms/Forms.svelte";
   import Notes from "./components/notes/Notes.svelte";
   import Calendar from "./components/calendar/Calendar.svelte";
+  import Arcade from "./components/arcade/Arcade.svelte";
   import type { DocKind, ModuleId } from "./types";
 
   $: mod = $activeModule as ModuleId;
@@ -40,7 +43,8 @@
     slides: "#f4b400",
     forms: "#7248b9",
     notes: "#fbbc04",
-    calendar: "#1967d2"
+    calendar: "#1967d2",
+    arcade: "#9333ea"
   };
   $: if (typeof document !== "undefined") {
     document.documentElement.style.setProperty("--sos-accent", moduleAccent[mod] ?? "#1a73e8");
@@ -182,10 +186,27 @@
         .catch(() => toast("Couldn't check for updates — you appear to be offline."));
     };
     window.addEventListener("sos:check-updates", onCheckUpdates);
+
+    // ── Talia says hi: one spoken greeting per session on the first user
+    // interaction (webviews require a gesture before speech). Skipped when a
+    // dictation session is already live — Talia never talks over her mic.
+    const greetOnce = (): void => {
+      window.removeEventListener("pointerdown", greetOnce);
+      window.removeEventListener("keydown", greetOnce);
+      const s = get(settings);
+      if (s.voiceEnabled && isSpeechSynthesisSupported() && !get(isListening)) {
+        speakTalia(ackPhrase("greeting"), s);
+      }
+    };
+    window.addEventListener("pointerdown", greetOnce, { once: true });
+    window.addEventListener("keydown", greetOnce, { once: true });
+
     return () => {
       clearTimeout(startupCheck);
       clearInterval(intervalCheck);
       window.removeEventListener("sos:check-updates", onCheckUpdates);
+      window.removeEventListener("pointerdown", greetOnce);
+      window.removeEventListener("keydown", greetOnce);
     };
   });
 
@@ -288,6 +309,8 @@
         <Notes />
       {:else if mod === "calendar"}
         <Calendar />
+      {:else if mod === "arcade"}
+        <Arcade />
       {/if}
     </main>
 

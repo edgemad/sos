@@ -15,6 +15,10 @@ export interface SosSettings {
   voiceEnabled: boolean;
   voiceRate: number;
   voiceName: string;
+  /** Talia's speaking persona: "kid" (cute, brighter) or "assistant". */
+  voicePersona: "kid" | "assistant";
+  /** Voice pitch 0.5–2 — higher sounds younger. */
+  voicePitch: number;
 }
 
 const KEY = "sos.settings.v1";
@@ -29,13 +33,16 @@ const defaults: SosSettings = {
   defaultDocsZoom: 100,
   voiceEnabled: true,
   voiceRate: 1,
-  voiceName: ""
+  voiceName: "",
+  voicePersona: "kid",
+  voicePitch: 1.4
 };
 
 function load(): SosSettings {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? { ...defaults, ...(JSON.parse(raw) as SosSettings) } : defaults;
+    const parsed = raw ? (JSON.parse(raw) as Partial<SosSettings>) : {};
+    return { ...defaults, ...parsed, voicePersona: parsed.voicePersona === "assistant" ? "assistant" : "kid" };
   } catch {
     return defaults;
   }

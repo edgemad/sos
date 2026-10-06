@@ -30,6 +30,17 @@
     "fs:allow-read-text-file",
     "fs:allow-exists",
     "fs:allow-mkdir",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME/*" },
+        { "path": "$HOME/**" },
+        { "path": "$DESKTOP/*" },
+        { "path": "$DOCUMENT/*" },
+        { "path": "$DOWNLOAD/*" },
+        { "path": "$PICTURE/*" }
+      ]
+    }
   ]
 }

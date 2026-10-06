@@ -2,7 +2,7 @@
   // Settings modal — opened from the native menu or the header gear.
   import { get } from "svelte/store";
   import { settings, resetSettings } from "../../lib/settings";
-  import { speechVoices, isSpeechSynthesisSupported, speak, stopSpeaking } from "../../lib/voice";
+  import { speechVoices, isSpeechSynthesisSupported, speakTalia, stopSpeaking } from "../../lib/voice";
   import { state, darkMode } from "../../lib/state";
   import { saveFileDialog } from "../../lib/tauri";
   import { createEventDispatcher, onMount, onDestroy } from "svelte";
@@ -22,11 +22,7 @@
   });
   function testVoice(): void {
     stopSpeaking();
-    const s = get(settings);
-    speak("Voice is ready. This is Simple Office Suite reading with your selected settings.", {
-      rate: s.voiceRate,
-      voiceName: s.voiceName || undefined
-    });
+    speakTalia("Hi hi! It's Talia! This is how I'll sound when I help you.", get(settings));
   }
 
   const fonts = [
@@ -95,13 +91,24 @@
         </label>
         <div class="grid grid-cols-2 gap-3 mt-2">
           <label class="flex flex-col gap-1 text-sm">
+            <span class="text-gray-500 text-xs">Persona</span>
+            <select class="input" value={$settings.voicePersona} on:change={(e) => settings.update((s) => ({ ...s, voicePersona: selectValue(e) === "assistant" ? "assistant" : "kid" }))}>
+              <option value="kid">🧒 Kid — cute & bright</option>
+              <option value="assistant">🤖 Assistant — calm & even</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="text-gray-500 text-xs">Pitch: {$settings.voicePitch.toFixed(1)}</span>
+            <input type="range" min="0.5" max="2" step="0.1" value={$settings.voicePitch} on:input={(e) => settings.update((s) => ({ ...s, voicePitch: parseFloat(inputText(e)) || 1 }))} />
+          </label>
+          <label class="flex flex-col gap-1 text-sm">
             <span class="text-gray-500 text-xs">Reading speed: {$settings.voiceRate.toFixed(1)}×</span>
             <input type="range" min="0.5" max="2" step="0.1" value={$settings.voiceRate} on:input={(e) => settings.update((s) => ({ ...s, voiceRate: parseFloat(inputText(e)) || 1 }))} />
           </label>
           <label class="flex flex-col gap-1 text-sm">
             <span class="text-gray-500 text-xs">Voice</span>
             <select class="input" value={$settings.voiceName} on:change={(e) => settings.update((s) => ({ ...s, voiceName: selectValue(e) }))}>
-              <option value="">Automatic</option>
+              <option value="">Automatic{($settings.voicePersona === "kid") ? " (kid-like)" : ""}</option>
               {#each voices as v (v.name)}
                 <option value={v.name}>{v.name} ({v.lang})</option>
               {/each}

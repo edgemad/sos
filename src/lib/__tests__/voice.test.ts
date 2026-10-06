@@ -4,7 +4,18 @@
 // tested here.)
 
 import { describe, expect, it } from "vitest";
-import { chunkTextForSpeech, clampRate, parseDictation, pickVoice, sanitizeForSpeech } from "../voice";
+import {
+  ackPhrase,
+  chunkTextForSpeech,
+  clampPitch,
+  clampRate,
+  kidVoiceScore,
+  parseDictation,
+  pickKidVoice,
+  pickVoice,
+  resolveVoicePrefs,
+  sanitizeForSpeech
+} from "../voice";
 
 describe("sanitizeForSpeech", () => {
   it("collapses whitespace and strips zero-width characters", () => {
@@ -87,6 +98,79 @@ describe("pickVoice", () => {
   });
 });
 
+describe("clampPitch", () => {
+  it("keeps pitch inside the Web Speech valid range", () => {
+    expect(clampPitch(1)).toBe(1);
+    expect(clampPitch(0.2)).toBe(0.5);
+    expect(clampPitch(3)).toBe(2);
+    expect(clampPitch(1.46)).toBe(1.5);
+    expect(clampPitch(NaN)).toBe(1);
+  });
+});
+
+describe("kid voice picking", () => {
+  const voices = [
+    { name: "Daniel", lang: "en-GB" },
+    { name: "Google UK English Female", lang: "en-GB" },
+    { name: "Junior", lang: "en-US" }
+  ];
+
+  it("scores child-named voices highest", () => {
+    const [daniel, googleFemale, junior] = voices;
+    expect(kidVoiceScore(junior)).toBeGreaterThan(kidVoiceScore(googleFemale));
+    expect(kidVoiceScore(googleFemale)).toBeGreaterThan(kidVoiceScore(daniel));
+  });
+
+  it("picks the most kid-like voice first", () => {
+    expect(pickKidVoice(voices)?.name).toBe("Junior");
+  });
+
+  it("still honours language when no kid voice exists", () => {
+    expect(pickKidVoice([{ name: "Daniel", lang: "en-GB" }, { name: "Anna", lang: "de-DE" }], "de-DE")?.name).toBe("Anna");
+    expect(pickKidVoice([])).toBeNull();
+  });
+});
+
+describe("ackPhrase", () => {
+  it("always returns a non-empty line, deterministic for a fixed rng", () => {
+    for (const kind of ["greeting", "ack", "done", "stop", "error"] as const) {
+      const line = ackPhrase(kind, () => 0);
+      expect(line.length).toBeGreaterThan(0);
+      expect(line).toBe(ackPhrase(kind, () => 0));
+      // An extreme rng stays inside the bank (never undefined).
+      expect(ackPhrase(kind, () => 0.999).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("can vary the line with the rng", () => {
+    const lines = new Set([ackPhrase("ack", () => 0), ackPhrase("ack", () => 0.51), ackPhrase("ack", () => 0.99)]);
+    expect(lines.size).toBeGreaterThan(1);
+  });
+});
+
+describe("resolveVoicePrefs", () => {
+  it("kid persona speaks faster, brighter and prefers a kid voice", () => {
+    const prefs = resolveVoicePrefs({ voiceEnabled: true, voiceRate: 1, voiceName: "", voicePersona: "kid", voicePitch: 1.4 });
+    expect(prefs.rate).toBe(1.1); // clampRate rounds to one decimal
+    expect(prefs.pitch).toBe(1.4);
+    expect(prefs.preferKid).toBe(true);
+    expect(prefs.voiceName).toBeUndefined();
+  });
+
+  it("assistant persona keeps the configured rate and an even pitch", () => {
+    const prefs = resolveVoicePrefs({ voiceEnabled: true, voiceRate: 1.3, voiceName: "", voicePersona: "assistant", voicePitch: 0 });
+    expect(prefs.rate).toBe(1.3);
+    expect(prefs.pitch).toBe(1);
+    expect(prefs.preferKid).toBe(false);
+  });
+
+  it("an explicit voice always wins over kid preference", () => {
+    const prefs = resolveVoicePrefs({ voiceEnabled: true, voiceRate: 1, voiceName: "Daniel", voicePersona: "kid", voicePitch: 1.4 });
+    expect(prefs.voiceName).toBe("Daniel");
+    expect(prefs.preferKid).toBe(false);
+  });
+});
+
 describe("parseDictation", () => {
   it("recognizes stop commands", () => {
     expect(parseDictation("stop listening")).toEqual({ action: "stop" });
@@ -109,5 +193,25 @@ describe("parseDictation", () => {
   it("passes normal text through untouched", () => {
     expect(parseDictation("Hello world")).toEqual({ action: "insert", text: "Hello world" });
     expect(parseDictation("  spaced out  ")).toEqual({ action: "insert", text: "spaced out" });
+  });
+
+  it("maps canvas commands (bold, headings, lists, scratch, date)", () => {
+    expect(parseDictation("bold that")).toEqual({ action: "command", command: "bold" });
+    expect(parseDictation("Heading two.")).toEqual({ action: "command", command: "formatBlock:h2" });
+    expect(parseDictation("bullet list")).toEqual({ action: "command", command: "insertUnorderedList" });
+    expect(parseDictation("scratch that")).toEqual({ action: "command", command: "sos:scratch" });
+    expect(parseDictation("insert date")).toEqual({ action: "command", command: "sos:date" });
+    expect(parseDictation("undo that")).toEqual({ action: "command", command: "undo" });
+  });
+
+  it("maps app navigation and creation", () => {
+    expect(parseDictation("open sheets")).toEqual({ action: "app", app: "sheets" });
+    expect(parseDictation("Open calendar")).toEqual({ action: "app", app: "calendar" });
+    expect(parseDictation("new note.")).toEqual({ action: "app", app: "new:note" });
+    expect(parseDictation("go home")).toEqual({ action: "app", app: "home" });
+  });
+
+  it("still recognizes Talia as a stop name", () => {
+    expect(parseDictation("Talia stop")).toEqual({ action: "stop" });
   });
 });

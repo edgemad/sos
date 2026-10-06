@@ -1,7 +1,7 @@
 {
   "name": "simple-office-suite",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "A complete offline-first, Google Workspace-style office suite: Docs, Sheets, Slides, Forms, Notes and Calendar. Zero cloud, MIT licensed.",
   "type": "module",
   "scripts": {

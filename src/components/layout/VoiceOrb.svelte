@@ -13,7 +13,8 @@
     startMicLevel,
     stopMicLevel,
     stopSpeaking,
-    stopVoiceTyping
+    stopVoiceTyping,
+    ackPhrase
   } from "../../lib/voice";
 
   $: active = $isListening || $isSpeaking;
@@ -27,14 +28,13 @@
     if (greetingTimer) clearTimeout(greetingTimer);
   });
 
-  // One-shot human greeting each time the orb wakes up.
+  // One-shot cute greeting each time the orb wakes up. Visual only — Talia
+  // never speaks while the mic is live, or she would transcribe herself.
   let wasActive = false;
   let greeting = "";
   let greetingTimer: ReturnType<typeof setTimeout> | null = null;
   function showGreeting(): void {
-    const h = new Date().getHours();
-    const part = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-    greeting = `${part} — Talia at your service.`;
+    greeting = ackPhrase("greeting");
     if (greetingTimer) clearTimeout(greetingTimer);
     greetingTimer = setTimeout(() => (greeting = ""), 4200);
   }

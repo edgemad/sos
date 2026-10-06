@@ -152,6 +152,73 @@ export function clampRate(rate: number): number {
   return Math.min(2, Math.max(0.5, Math.round(rate * 10) / 10));
 }
 
+/** Clamp a pitch into the Web Speech API's valid 0.5–2 range (1 = normal).
+ *  Higher pitches sound younger — the kid persona sits around 1.4–1.6. */
+export function clampPitch(pitch: number): number {
+  if (!Number.isFinite(pitch)) return 1;
+  return Math.min(2, Math.max(0.5, Math.round(pitch * 10) / 10));
+}
+
+// ── Kid persona: voice choice + playful phrase bank ───────────────────
+
+/** Score a platform voice for how kid-like it sounds. Higher = younger.
+ *  Voices explicitly named for children win; otherwise we prefer voices the
+ *  platforms ship with a brighter, female register. Pure + unit-tested. */
+export function kidVoiceScore(voice: VoiceLike): number {
+  const n = voice.name.toLowerCase();
+  let score = 0;
+  if (/\b(junior|kid|child|young|superstar)\b/.test(n)) score += 100;
+  if (/(zira|susan|samantha|victoria|karen|moira|tessa|fiona|amelie|joana|luciana|monica|paulina|yuna|kyoko|mei-?jia|alva|female)/.test(n)) score += 40;
+  if (/female/.test(n)) score += 20; // "Google UK English Female" etc.
+  if (/\bmale\b/.test(n)) score -= 30;
+  if (/google/.test(n)) score += 10;
+  return score;
+}
+
+/** Pick a kid-appropriate voice: rank by kidVoiceScore (stable), then apply
+ *  the regular pickVoice preference chain to the ranked list. */
+export function pickKidVoice<T extends VoiceLike>(voices: readonly T[], lang?: string): T | null {
+  if (voices.length === 0) return null;
+  const ranked = voices
+    .map((v, i) => ({ v, i, score: kidVoiceScore(v) }))
+    .sort((a, b) => (b.score - a.score) || (a.i - b.i))
+    .map((x) => x.v);
+  return pickVoice(ranked, undefined, lang);
+}
+
+/** Kinds of short spoken lines Talia peppers into the conversation. */
+export type AckKind = "greeting" | "ack" | "done" | "stop" | "error";
+
+const ACK_LINES: Record<AckKind, string[]> = {
+  greeting: [
+    "Hi hi! Talia here — ready when you are!",
+    "Ooh, hello! What are we making today?",
+    "Talia's on duty! Whatcha need?",
+    "Beep boop — your helper is awake!"
+  ],
+  ack: [
+    "Okay okay — on it!",
+    "Okey dokey!",
+    "Got it, doing the thing!",
+    "You got it!"
+  ],
+  done: [
+    "Done! Hi-five!",
+    "All done!",
+    "Ta-da!",
+    "There we go!"
+  ],
+  stop: ["Going quiet!", "Okay, shhh now."],
+  error: ["Oopsie, that didn't work.", "Hmm, I couldn't do that one."]
+};
+
+/** A short, cute spoken ack for the given moment. Deterministic given the
+ *  same rng (defaults to Math.random) — pass a seed fn in tests. */
+export function ackPhrase(kind: AckKind, rng: () => number = Math.random): string {
+  const lines = ACK_LINES[kind];
+  return lines[Math.min(lines.length - 1, Math.floor(rng() * lines.length))] ?? lines[0];
+}
+
 /** Split text into utterance-sized chunks. Synthesizers choke on very long
  *  strings, so we break on sentence boundaries (never inside numbers like
  *  3.14) and recombine up to `maxLen` characters per chunk. */
@@ -241,15 +308,25 @@ export function pickVoice<T extends VoiceLike>(voices: readonly T[], preferredNa
 
 // ── Dictation commands (Jarvis-style voice control) ───────────────────
 
-export type DictationAction = "insert" | "stop" | "newline";
+/** What Talia should do with a finished dictation phrase:
+ *  - insert: plain text to type at the cursor
+ *  - stop / newline: session + layout control
+ *  - command: run a canvas command (bold, heading, lists, undo, …)
+ *  - app: navigate or create at the app level ("open sheets", "new note") */
+export type DictationAction = "insert" | "stop" | "newline" | "command" | "app";
 
 export interface DictationCommand {
   action: DictationAction;
   /** Text to insert (insert action only). */
   text?: string;
+  /** Canvas command to run (command action only), e.g. "bold", "formatBlock:h1". */
+  command?: string;
+  /** App target for navigation/creation (app action only), e.g. "sheets",
+ *  "new:note". */
+  app?: string;
 }
 
-const DICTATION_STOPS = new Set(["stop listening", "stop dictation", "go to sleep", "jarvis stop"]);
+const DICTATION_STOPS = new Set(["stop listening", "stop dictation", "go to sleep", "jarvis stop", "talia stop"]);
 const DICTATION_NEWLINES = new Set(["new paragraph", "new line", "newline"]);
 const DICTATION_PUNCT: Record<string, string> = {
   period: ".",
@@ -260,14 +337,72 @@ const DICTATION_PUNCT: Record<string, string> = {
   "exclamation point": "!"
 };
 
-/** Interpret a final dictation transcript as either a voice command or plain
- *  text to insert. Commands must match exactly (after trimming, lowercasing
- *  and stripping trailing punctuation); everything else passes through. */
+/** Spoken phrase → canvas command. Canvas commands match Writer's exec ids. */
+const DICTATION_COMMANDS: Record<string, string> = {
+  bold: "bold",
+  "bold that": "bold",
+  "make it bold": "bold",
+  italic: "italic",
+  "make it italic": "italic",
+  underline: "underline",
+  "underline that": "underline",
+  "heading one": "formatBlock:h1",
+  "heading 1": "formatBlock:h1",
+  "heading two": "formatBlock:h2",
+  "heading 2": "formatBlock:h2",
+  "heading three": "formatBlock:h3",
+  title: "formatBlock:title",
+  quote: "formatBlock:blockquote",
+  "code block": "formatBlock:pre",
+  "bullet list": "insertUnorderedList",
+  bullets: "insertUnorderedList",
+  "numbered list": "insertOrderedList",
+  numbers: "insertOrderedList",
+  "clear formatting": "removeFormat",
+  undo: "undo",
+  "undo that": "undo",
+  redo: "redo",
+  "scratch that": "sos:scratch",
+  "delete that": "sos:scratch",
+  date: "sos:date",
+  "insert date": "sos:date",
+  "today's date": "sos:date"
+};
+
+/** Spoken phrase → app navigation/creation target. */
+const DICTATION_APPS: Record<string, string> = {
+  "go home": "home",
+  "open home": "home",
+  "open docs": "writer",
+  "open documents": "writer",
+  "open sheets": "sheets",
+  "open spreadsheet": "sheets",
+  "open slides": "slides",
+  "open presentation": "slides",
+  "open forms": "forms",
+  "open notes": "notes",
+  "open calendar": "calendar",
+  "open games": "arcade",
+  "open arcade": "arcade",
+  "play games": "arcade",
+  "new document": "new:document",
+  "new doc": "new:document",
+  "new spreadsheet": "new:spreadsheet",
+  "new presentation": "new:deck",
+  "new form": "new:form",
+  "new note": "new:note"
+};
+
+/** Interpret a final dictation transcript as a voice command or plain text
+ *  to insert. Commands must match exactly (after trimming, lowercasing and
+ *  stripping trailing punctuation); everything else passes through. */
 export function parseDictation(transcript: string): DictationCommand {
   const t = transcript.trim().toLowerCase().replace(/[.!?…]+$/, "");
   if (DICTATION_STOPS.has(t)) return { action: "stop" };
   if (DICTATION_NEWLINES.has(t)) return { action: "newline" };
   if (t in DICTATION_PUNCT) return { action: "insert", text: DICTATION_PUNCT[t] };
+  if (t in DICTATION_COMMANDS) return { action: "command", command: DICTATION_COMMANDS[t] };
+  if (t in DICTATION_APPS) return { action: "app", app: DICTATION_APPS[t] };
   return { action: "insert", text: transcript.trim() };
 }
 
@@ -276,8 +411,12 @@ export function parseDictation(transcript: string): DictationCommand {
 export interface SpeakOptions {
   /** Reading speed, 0.5–2 (1 = normal). Clamped automatically. */
   rate?: number;
+  /** Voice pitch, 0.5–2 (1 = normal). Higher = younger/cuter. */
+  pitch?: number;
   /** Preferred platform voice by name ("" = automatic). */
   voiceName?: string;
+  /** When no explicit voice is set, prefer a kid-like platform voice. */
+  preferKid?: boolean;
   /** BCP-47 language hint, e.g. navigator.language. */
   lang?: string;
   /** Called once when the last chunk finishes naturally. */
@@ -295,12 +434,17 @@ export function speak(text: string, opts: SpeakOptions = {}): boolean {
   if (chunks.length === 0) return false;
 
   synth.cancel(); // never overlap a previous read-aloud
-  const voice = pickVoice(synth.getVoices(), opts.voiceName, opts.lang) ?? undefined;
+  const voice = opts.voiceName
+    ? pickVoice(synth.getVoices(), opts.voiceName, opts.lang) ?? undefined
+    : opts.preferKid
+      ? pickKidVoice(synth.getVoices(), opts.lang) ?? undefined
+      : pickVoice(synth.getVoices(), undefined, opts.lang) ?? undefined;
   const queue = chunks.map((chunk, i) => {
     const u = new SpeechSynthesisUtterance(chunk);
     if (voice) u.voice = voice;
     else if (opts.lang) u.lang = opts.lang;
     u.rate = clampRate(opts.rate ?? 1);
+    u.pitch = clampPitch(opts.pitch ?? 1);
     u.onboundary = () => speakPulse.update((n) => n + 1); // orb word pulse
     if (i === chunks.length - 1) {
       const done = opts.onEnd;
@@ -330,6 +474,39 @@ export function stopSpeaking(): void {
   if (!isSpeechSynthesisSupported()) return;
   window.speechSynthesis.cancel();
   isSpeaking.set(false);
+}
+
+// ── Talia persona: settings → speak options ─────────────────────────
+
+/** The slice of app settings Talia's voice cares about (structural subset so
+ *  tests can pass plain objects). */
+export interface VoiceSettingsLike {
+  voiceEnabled: boolean;
+  voiceRate: number;
+  voiceName: string;
+  voicePersona: "kid" | "assistant";
+  voicePitch: number;
+}
+
+/** Resolve the persona's concrete speak options: the kid persona speaks a
+ *  touch faster and brighter, and (without an explicit voice) picks the most
+ *  kid-like platform voice. Pure + unit-tested. */
+export function resolveVoicePrefs(s: VoiceSettingsLike): { rate: number; pitch: number; voiceName?: string; preferKid: boolean } {
+  const kid = s.voicePersona === "kid";
+  return {
+    rate: clampRate(s.voiceRate * (kid ? 1.12 : 1)),
+    pitch: clampPitch(s.voicePitch || (kid ? 1.5 : 1)),
+    voiceName: s.voiceName || undefined,
+    preferKid: kid && !s.voiceName
+  };
+}
+
+/** Speak as Talia, honouring the app's voice settings and persona. Returns
+ *  false when voice is disabled or synthesis is unavailable. */
+export function speakTalia(text: string, s: VoiceSettingsLike, onEnd?: () => void): boolean {
+  if (!s.voiceEnabled) return false;
+  const prefs = resolveVoicePrefs(s);
+  return speak(text, { ...prefs, onEnd });
 }
 
 // ── Speech recognition (voice typing) ───────────────────────────────────

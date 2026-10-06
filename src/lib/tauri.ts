@@ -88,6 +88,20 @@ export async function writeFile(path: string, contents: string): Promise<boolean
   }
 }
 
+/** Open a local file/folder with the OS default handler (attachment chips
+ *  use this on the desktop). Browser builds report failure. */
+export async function openPathExternal(path: string): Promise<boolean> {
+  const invoke = await getInvoke();
+  if (!invoke) return false;
+  try {
+    await invoke("plugin:opener|open_path", { path });
+    return true;
+  } catch (e) {
+    console.error("open_path failed", e);
+    return false;
+  }
+}
+
 /**
  * Open a URL with the OS browser. Inside Tauri, window.open to remote targets
  * is unreliable/blocked, so we route through the opener plugin; browsers use

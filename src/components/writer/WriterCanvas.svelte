@@ -3,7 +3,16 @@
   // Emits edit(html) and exposes exec/focus/scrollToHeading via onApi.
   import { createEventDispatcher, onDestroy, onMount } from "svelte";
   import type { WriterSettings } from "../../types";
-  import { appPrompt } from "../../lib/uiBridge";
+  import { appPrompt, toast } from "../../lib/uiBridge";
+  import {
+    buildAttachmentChip,
+    escapeAttr,
+    fileToEmbeddedImageSrc,
+    isImageFile,
+    MAX_INLINE_ATTACHMENT_BYTES,
+    readFileDataUrl
+  } from "../../lib/attachments";
+  import { openPathExternal } from "../../lib/tauri";
 
   export let html: string;
   export let settings: Partial<WriterSettings> = {};
@@ -41,6 +50,8 @@
   function exec(cmd: string, val?: string): void {
     editor.focus();
     if (cmd === "sos:table") { void insertTable(); return; }
+    if (cmd === "sos:image") { void insertImageFromPicker(); return; }
+    if (cmd === "sos:attach") { void attachAnyFile(); return; }
     if (cmd === "sos:checklist") return insertChecklist();
     if (cmd === "sos:paint-get") { clipboardFormat = getCurrentFormat(); return; }
     if (cmd === "sos:paint-apply") { applyFormat(); return; }
@@ -133,6 +144,132 @@
     emit();
   }
 
+  // ── Images & attachments ──────────────────────────────────────
+
+  function insertHtmlAtCursor(html: string): void {
+    document.execCommand("insertHTML", false, html);
+    emit();
+    updatePageCount();
+  }
+
+  /** Native file input for browser-mode picking. */
+  function pickFileInput(accept: string): Promise<File | null> {
+    return new Promise((resolve) => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      if (accept) inp.accept = accept;
+      inp.onchange = () => resolve(inp.files?.[0] ?? null);
+      inp.oncancel = () => resolve(null);
+      inp.click();
+    });
+  }
+
+  /** Running inside the Tauri desktop/webview shell? */
+  function inTauri(): boolean {
+    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  }
+
+  /** Insert an image picked from disk. Desktop uses the native picker and
+   *  references the file in place (asset protocol, no document bloat);
+   *  browsers embed a downscaled data URL so the doc stays self-contained. */
+  async function insertImageFromPicker(): Promise<void> {
+    let src: string | null = null;
+    if (inTauri()) {
+      try {
+        const core = await import("@tauri-apps/api/core");
+        const path = await core.invoke<string | null>("pick_image_dialog");
+        if (path) src = core.convertFileSrc(path);
+      } catch {
+        /* fall through to the browser picker */
+      }
+    }
+    if (!src) {
+      const f = await pickFileInput("image/*");
+      if (!f) return; // user cancelled
+      src = await fileToEmbeddedImageSrc(f);
+    }
+    insertHtmlAtCursor(`<img src="${escapeAttr(src)}" alt="Image" style="max-width:100%;border-radius:4px">`);
+  }
+
+  /** Attach a file of ANY type as a clickable chip at the cursor. Desktop
+   *  chips link to the original path (opened with the OS handler); browser
+   *  chips embed small files as data URLs for later download. */
+  async function attachAnyFile(): Promise<void> {
+    if (inTauri()) {
+      try {
+        const core = await import("@tauri-apps/api/core");
+        const picked = await core.invoke<{ path: string; name: string } | null>("pick_any_file_dialog");
+        if (picked) {
+          insertHtmlAtCursor(buildAttachmentChip({ name: picked.name, target: picked.path }));
+          return;
+        }
+        return; // user cancelled
+      } catch {
+        /* fall through to the browser picker */
+      }
+    }
+    const f = await pickFileInput("");
+    if (!f) return;
+    if (f.size <= MAX_INLINE_ATTACHMENT_BYTES) {
+      insertHtmlAtCursor(buildAttachmentChip({ name: f.name, size: f.size, target: await readFileDataUrl(f) }));
+    } else {
+      insertHtmlAtCursor(buildAttachmentChip({ name: f.name, size: f.size }));
+      toast("Big file — attached as a label only (over 512 KB can't be embedded in the browser).");
+    }
+  }
+
+  /** Paste image support: pasted screenshots become embedded images. */
+  async function onPaste(e: ClipboardEvent): Promise<void> {
+    const images = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return; // normal text/HTML paste
+    e.preventDefault();
+    for (const f of images) {
+      const src = await fileToEmbeddedImageSrc(f);
+      insertHtmlAtCursor(`<img src="${escapeAttr(src)}" alt="Pasted image" style="max-width:100%;border-radius:4px">`);
+    }
+  }
+
+  /** Drop support: images embed inline; any other file becomes an
+   *  attachment chip (embedded when small enough). */
+  async function onDrop(e: DragEvent): Promise<void> {
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+    e.preventDefault();
+    for (const f of files) {
+      if (isImageFile(f.name, f.type)) {
+        const src = await fileToEmbeddedImageSrc(f);
+        insertHtmlAtCursor(`<img src="${escapeAttr(src)}" alt="${escapeAttr(f.name)}" style="max-width:100%;border-radius:4px">`);
+      } else if (f.size <= MAX_INLINE_ATTACHMENT_BYTES) {
+        insertHtmlAtCursor(buildAttachmentChip({ name: f.name, size: f.size, target: await readFileDataUrl(f) }));
+      } else {
+        insertHtmlAtCursor(buildAttachmentChip({ name: f.name, size: f.size }));
+      }
+    }
+  }
+
+  /** Click on an attachment chip: download embedded payloads, open disk
+   *  paths with the OS default app. */
+  function onEditorClick(e: MouseEvent): void {
+    const el = (e.target as Element | null)?.closest?.(".sos-attach") as HTMLElement | null;
+    if (!el) return;
+    const target = el.getAttribute("data-sos-target");
+    const name = el.textContent?.trim() ?? "attachment";
+    if (!target) {
+      toast("This attachment has no embedded copy — open it from its original location.");
+      return;
+    }
+    if (target.startsWith("data:")) {
+      const a = document.createElement("a");
+      a.href = target;
+      a.download = name.replace(/\s*·.*$/, "");
+      a.click();
+      return;
+    }
+    void openPathExternal(target).then((ok) => {
+      if (!ok) toast(`Couldn't open ${name} — is it still at ${target}?`);
+    });
+  }
+
   function scrollToHeading(index: number): void {
     const hs = [...editor.querySelectorAll("h1, h2, h3")];
     const h = hs[index];
@@ -207,6 +344,10 @@
               on:input={onInput}
               on:keydown={onKeydown}
               on:blur={emit}
+              on:click={onEditorClick}
+              on:paste={onPaste}
+              on:dragover={(e) => e.preventDefault()}
+              on:drop={onDrop}
               role="textbox"
               aria-multiline="true"
             />
@@ -240,6 +381,10 @@
           on:input={onInput}
           on:keydown={onKeydown}
           on:blur={emit}
+          on:click={onEditorClick}
+          on:paste={onPaste}
+          on:dragover={(e) => e.preventDefault()}
+          on:drop={onDrop}
           role="textbox"
           aria-multiline="true"
         />

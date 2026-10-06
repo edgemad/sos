@@ -167,6 +167,7 @@
   <!-- link / comment / image -->
   <button class="tb" title="Insert link (⌘K)" on:click={() => fire("createLink")}>🔗</button>
   <button class="tb" title="Insert image" on:click={() => fire("insert:image")}>🖼</button>
+  <button class="tb" title="Attach file" on:click={() => fire("insert:attachment")}>📎</button>
   <span class="tbsep" />
 
   <!-- lists -->

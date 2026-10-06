@@ -11,7 +11,8 @@
     restoreFile,
     deleteForever,
     emptyTrash,
-    setColor
+    setColor,
+    activeModule
   } from "../../lib/state";
   import type { DocKind, SosFileMeta } from "../../types";
 
@@ -150,6 +151,15 @@
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-snug">{t.blurb}</p>
         </button>
       {/each}
+      <button
+        class="card glass p-4 w-[190px] shrink-0 text-left hover:shadow-modal transition-transform hover:-translate-y-0.5"
+        title="Open Talia Arcade"
+        on:click={() => activeModule.set("arcade")}
+      >
+        <div class="w-10 h-10 rounded-full grid place-items-center text-xl mb-3" style="background:#9333ea22">🕹️</div>
+        <p class="font-medium text-sm">Talia Arcade</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-snug">Take a break — games run right on your device</p>
+      </button>
     </div>
   </section>
 

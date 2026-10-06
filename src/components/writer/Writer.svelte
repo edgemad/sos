@@ -2,16 +2,16 @@
   import { onDestroy } from "svelte";
   // Writer orchestrator — the Docs module. Mirrors Google Docs' chrome:
   // menu bar, formatting toolbar, document tabs + outline sidebar, canvas.
-  import { openFile, updateContent, writerTabs, addWriterTab, selectWriterTab, renameWriterTab, deleteWriterTab, duplicateFile, trashFile, createFile, openInEditor } from "../../lib/state";
+  import { activeModule, openFile, updateContent, writerTabs, addWriterTab, selectWriterTab, renameWriterTab, deleteWriterTab, duplicateFile, trashFile, createFile, openInEditor } from "../../lib/state";
   import { countWords, htmlToMarkdown, htmlToText, escapeHtml, download, exportPdf } from "../../lib/utils";
   import { saveFileDialog, openFileDialog, openExternal } from "../../lib/tauri";
   import { appPrompt, toast } from "../../lib/uiBridge";
   import { get } from "svelte/store";
   import { settings as appSettings } from "../../lib/settings";
-  import { createVoiceTyping, isSpeechRecognitionSupported, isSpeechSynthesisSupported, parseDictation, speak, stopSpeaking, isSpeaking, type VoiceTypingHandle } from "../../lib/voice";
+  import { ackPhrase, createVoiceTyping, isSpeechRecognitionSupported, isSpeechSynthesisSupported, parseDictation, speakTalia, stopSpeaking, isSpeaking, type VoiceTypingHandle } from "../../lib/voice";
   import { recordCommand } from "../../lib/adaptive";
   import { exportDocx, exportOdt, exportHtml, exportMarkdown, exportTxt, importDocx, importOdt, importRtf, importMarkdown, importHtmlFile, importFilterFor } from "../../lib/converters";
-  import type { WriterDoc, WriterSettings } from "../../types";
+  import type { DocKind, ModuleId, WriterDoc, WriterSettings } from "../../types";
   import DocsMenubar from "./DocsMenubar.svelte";
   import DocsToolbar from "./DocsToolbar.svelte";
   import DocSidebar from "./DocSidebar.svelte";
@@ -155,6 +155,13 @@
 
   let voiceActive = false;
   let voiceTyping: VoiceTypingHandle | null = null;
+  // While Talia speaks an ack, the live mic would transcribe her own voice
+  // into the document — ignore finals until shortly after she goes quiet.
+  let muteUntil = 0;
+  function spokenAck(kind: "ack" | "stop"): void {
+    speakTalia(ackPhrase(kind), $appSettings);
+    muteUntil = performance.now() + 2200;
+  }
 
   function toggleVoice(): void {
     if (voiceActive) {
@@ -172,16 +179,27 @@
     }
     voiceTyping = createVoiceTyping({
       onFinal: (text) => {
+        if (performance.now() < muteUntil) return; // Talia is talking — don't echo her
         const cmd = parseDictation(text);
         if (cmd.action === "stop") {
           voiceTyping?.stop();
           toast("Voice typing off.");
-          // Spoken ack — small Jarvis touch.
-          speak("Going quiet.", { rate: $appSettings.voiceRate, voiceName: $appSettings.voiceName || undefined });
+          spokenAck("stop");
           return;
         }
         if (cmd.action === "newline") {
           canvasApi?.exec("insertHTML", "<br><br>");
+          return;
+        }
+        if (cmd.action === "command") {
+          // Jarvis power: spoken formatting/undo/date commands with a cute ack.
+          spokenAck("ack");
+          runDictationCommand(cmd.command ?? "");
+          return;
+        }
+        if (cmd.action === "app") {
+          spokenAck("ack");
+          runDictationApp(cmd.app ?? "");
           return;
         }
         if (cmd.text) canvasApi?.exec("insertHTML", escapeHtml(cmd.text) + " ");
@@ -196,6 +214,30 @@
     }
     voiceTyping.start();
     voiceActive = true;
+  }
+
+  /** Canvas-side voice commands: "bold", "formatBlock:h1", "undo",
+   *  "sos:scratch", "sos:date", list toggles… */
+  function runDictationCommand(c: string): void {
+    if (!c) return;
+    if (c === "sos:scratch") { document.execCommand("delete"); return; }
+    if (c === "sos:date") {
+      canvasApi?.exec("insertText", new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }));
+      return;
+    }
+    if (c.startsWith("formatBlock:")) { canvasApi?.exec("formatBlock", c.slice("formatBlock:".length)); return; }
+    canvasApi?.exec(c);
+  }
+
+  /** App-level voice commands: jump between modules or create a new file
+   *  ("open sheets", "new note", …). */
+  function runDictationApp(app: string): void {
+    if (!app) return;
+    if (app.startsWith("new:")) {
+      createFile(app.slice(4) as DocKind);
+      return;
+    }
+    activeModule.set(app as ModuleId);
   }
 
   /** Read the current selection (or the whole document) aloud. */
@@ -215,11 +257,7 @@
       toast("Nothing to read — the document is empty.");
       return;
     }
-    const ok = speak(text, {
-      rate: $appSettings.voiceRate,
-      voiceName: $appSettings.voiceName || undefined,
-      lang: navigator.language || "en-US"
-    });
+    const ok = speakTalia(text, $appSettings);
     toast(ok ? (sel ? "Reading the selection aloud…" : "Reading the document aloud…") : "Speech synthesis is unavailable on this device.");
   }
 
@@ -273,6 +311,7 @@
       case "view:zoom-out": patchSettings({ zoom: Math.max(50, settings.zoom - 10) }); return;
       // Insert
       case "insert:image": canvasApi?.exec("sos:image"); return;
+      case "insert:attachment": canvasApi?.exec("sos:attach"); return;
       case "insert:table": canvasApi?.exec("sos:table"); return;
       case "insert:link": promptLink(); return;
       case "insert:hr": canvasApi?.exec("insertHorizontalRule"); return;

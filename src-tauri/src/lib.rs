@@ -94,6 +94,33 @@ async fn pick_image_dialog(app: tauri::AppHandle) -> Result<Option<String>, Stri
     }
 }
 
+/// Ask the OS for a file of ANY type and return its absolute path — used by
+/// the document attachment feature. Unlike `open_file_dialog` this places no
+/// extension filter, so macOS pickers allow pdf/zip/mp3/… as well.
+#[tauri::command]
+async fn pick_any_file_dialog(app: tauri::AppHandle) -> Result<Option<OpenedFile>, String> {
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("All files", &["*"])
+        .blocking_pick_file();
+    match picked {
+        Some(file_path) => {
+            let path = file_path.into_path().map_err(|e| e.to_string())?;
+            let name = path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "untitled".into());
+            Ok(Some(OpenedFile {
+                path: path.to_string_lossy().to_string(),
+                name,
+                content: String::new(),
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
 /// Ask the OS where to save, then write the file. Returns the path written.
 #[tauri::command]
 async fn save_file_dialog(
@@ -351,6 +378,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_file_dialog,
             pick_image_dialog,
+            pick_any_file_dialog,
             save_file_dialog,
             write_text_file,
             read_text_file,

@@ -5,7 +5,7 @@
   import { paletteOpen, fileMetas, createFile, openInEditor, activeModule, openFile } from "../../lib/state";
   import { settings } from "../../lib/settings";
   import { toast } from "../../lib/uiBridge";
-  import { speak, stopSpeaking, isSpeechSynthesisSupported } from "../../lib/voice";
+  import { speakTalia, stopSpeaking, isSpeechSynthesisSupported } from "../../lib/voice";
   import { htmlToText } from "../../lib/utils";
   import type { ModuleId, SosFileMeta } from "../../types";
 
@@ -35,7 +35,8 @@
       { m: "slides", label: "Go to Slides", icon: "🖼️" },
       { m: "forms", label: "Go to Forms", icon: "📝" },
       { m: "notes", label: "Go to Notes", icon: "🗒️" },
-      { m: "calendar", label: "Go to Calendar", icon: "📅" }
+      { m: "calendar", label: "Go to Calendar", icon: "📅" },
+      { m: "arcade", label: "Go to Arcade", icon: "🕹️" }
     ];
     for (const n of nav) {
       if (matches(n.label, q))
@@ -62,7 +63,9 @@
           settings.update((s) => ({ ...s, voiceEnabled: !s.voiceEnabled }));
           toast(voiceEnabled ? "Voice features off" : "Voice features on");
         }
-      }
+      },
+      { id: "insert-image", label: "Insert image (in the open doc)", hint: "Docs", run: () => void writerCmd("insert:image") },
+      { id: "insert-attachment", label: "Attach file (in the open doc)", hint: "Docs", run: () => void writerCmd("insert:attachment") }
     ];
     for (const c of voice) {
       if (matches(c.label, q)) cmds.push(c);
@@ -87,6 +90,17 @@
 
   function matches(text: string, q: string): boolean {
     return !q || text.toLowerCase().includes(q.toLowerCase());
+  }
+
+  /** Forward a Docs command to the open Writer via its event bridge
+   *  (no-ops with a toast when no document is open). */
+  async function writerCmd(cmd: string): Promise<void> {
+    const f = get(openFile);
+    if (f?.kind !== "document") {
+      toast("Open a document first — images and attachments live in Docs.");
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("sos-cmd-writer", { detail: { cmd } }));
   }
 
   /** Record usage (self-learning) and run the command. */
@@ -119,7 +133,7 @@
       toast("Nothing to read — the document is empty.");
       return;
     }
-    const ok = speak(text, { rate: s.voiceRate, voiceName: s.voiceName || undefined });
+    const ok = speakTalia(text, s);
     toast(ok ? "Reading the document aloud…" : "Speech synthesis is unavailable on this device.");
   }
 

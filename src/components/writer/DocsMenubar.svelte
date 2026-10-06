@@ -81,6 +81,7 @@
       label: "Insert",
       entries: [
         { id: "insert:image", label: "Image…" },
+        { id: "insert:attachment", label: "Attach file…" },
         { id: "insert:table", label: "Table…" },
         { id: "insert:link", label: "Link…" },
         { id: "insert:hr", label: "Horizontal line" },
