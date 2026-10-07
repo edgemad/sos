@@ -37,6 +37,8 @@ export function mount(container: HTMLElement, opts: GameOpts = {}): GameHandle {
   let moves = 0;
   let matched = 0;
   let lock = false;
+  let destroyed = false;
+  let flipBackTimer: ReturnType<typeof setTimeout> | null = null;
 
   function deal(): void {
     cards = shuffle([...MEMORY_EMOJI, ...MEMORY_EMOJI]).map((emoji) => ({ emoji, matched: false }));
@@ -89,7 +91,9 @@ export function mount(container: HTMLElement, opts: GameOpts = {}): GameHandle {
       }
     } else {
       lock = true;
-      setTimeout(() => {
+      flipBackTimer = setTimeout(() => {
+        flipBackTimer = null;
+        if (destroyed) return;
         open = [];
         lock = false;
         paint();
@@ -101,6 +105,8 @@ export function mount(container: HTMLElement, opts: GameOpts = {}): GameHandle {
 
   return {
     destroy(): void {
+      destroyed = true;
+      if (flipBackTimer) clearTimeout(flipBackTimer);
       wrap.remove();
     }
   };

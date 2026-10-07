@@ -72,6 +72,8 @@ export function mount(container: HTMLElement, opts: GameOpts = {}): GameHandle {
   let board: TttBoard = Array(9).fill(" ");
   let over = false;
   let thinking = false;
+  let destroyed = false;
+  let thinkTimer: ReturnType<typeof setTimeout> | null = null;
   const buttons: HTMLButtonElement[] = [];
 
   function paint(): void {
@@ -105,7 +107,9 @@ export function mount(container: HTMLElement, opts: GameOpts = {}): GameHandle {
     thinking = true;
     paint();
     status.textContent = "Talia is thinking…";
-    setTimeout(() => {
+    thinkTimer = setTimeout(() => {
+      thinkTimer = null;
+      if (destroyed) return;
       const move = taliaMove(board, "O");
       if (move >= 0) board[move] = "O";
       thinking = false;
@@ -137,6 +141,8 @@ export function mount(container: HTMLElement, opts: GameOpts = {}): GameHandle {
 
   return {
     destroy(): void {
+      destroyed = true;
+      if (thinkTimer) clearTimeout(thinkTimer);
       wrap.remove();
     }
   };

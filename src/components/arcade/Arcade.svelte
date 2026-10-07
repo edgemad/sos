@@ -25,7 +25,11 @@
   let installTimer: ReturnType<typeof setInterval> | null = null;
 
   $: installedCount = $arcade.installed.length;
-  $: featured = [...GAMES].sort((a, b) => Number(isInstalled($arcade, b.id)) - Number(isInstalled($arcade, a.id)) || b.rating - a.rating)[0];
+  // Feature a game you don't have yet (highest rated first); installed games
+  // only step in once everything is installed.
+  $: featured = [...GAMES].sort(
+    (a, b) => Number(isInstalled($arcade, a.id)) - Number(isInstalled($arcade, b.id)) || b.rating - a.rating
+  )[0];
   $: visible = GAMES.filter((g) => filter === "All" || g.category === filter);
 
   function startInstall(id: GameId): void {

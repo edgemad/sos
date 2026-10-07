@@ -7,6 +7,7 @@
 
   const moduleIcon: Record<ModuleId, string> = {
     home: "🏠",
+    chat: "💬",
     writer: "📄",
     sheets: "📊",
     slides: "🖼️",
@@ -18,6 +19,7 @@
 
   const moduleLabel: Record<ModuleId, string> = {
     home: "Home",
+    chat: "Talia",
     writer: "Docs",
     sheets: "Sheets",
     slides: "Slides",
@@ -27,7 +29,7 @@
     arcade: "Arcade"
   };
 
-  const modules: ModuleId[] = ["writer", "sheets", "slides", "forms", "notes", "calendar", "arcade"];
+  const modules: ModuleId[] = ["chat", "writer", "sheets", "slides", "forms", "notes", "calendar", "arcade"];
 
   $: recentDocs = $fileMetas
     .filter((f) => !f.trashed)

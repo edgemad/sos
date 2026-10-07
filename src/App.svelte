@@ -9,6 +9,7 @@
   import { saveFileDialog, writeFile, openExternal } from "./lib/tauri";
   import { checkForUpdates, type UpdateInfo } from "./lib/updates";
   import { settings } from "./lib/settings";
+import { applyThemePreset } from "./lib/themes";
   import { ackPhrase, isSpeechSynthesisSupported, isListening, speakTalia } from "./lib/voice";
   import { version as APP_VERSION } from "../package.json";
   import { registerAskHost, resolveAsk, type AskRequest, registerToastHost, toast, flushPendingToasts, type ToastMsg } from "./lib/uiBridge";
@@ -20,6 +21,7 @@
   import SettingsModal from "./components/layout/SettingsModal.svelte";
   import VoiceOrb from "./components/layout/VoiceOrb.svelte";
   import Home from "./components/home/Home.svelte";
+import Chat from "./components/chat/Chat.svelte";
   import Writer from "./components/writer/Writer.svelte";
   import Sheets from "./components/sheets/Sheets.svelte";
   import Slides from "./components/slides/Slides.svelte";
@@ -38,6 +40,7 @@
   // Liquid Glass: tint the whole chrome with the active module's accent.
   const moduleAccent: Record<ModuleId, string> = {
     home: "#1a73e8",
+    chat: "#e91e8c",
     writer: "#1a73e8",
     sheets: "#0f9d58",
     slides: "#f4b400",
@@ -47,7 +50,9 @@
     arcade: "#9333ea"
   };
   $: if (typeof document !== "undefined") {
-    document.documentElement.style.setProperty("--sos-accent", moduleAccent[mod] ?? "#1a73e8");
+    // Home and Chat wear the user's theme; editor modules keep their accents.
+    if (mod === "home" || mod === "chat") applyThemePreset($settings.themePreset);
+    else document.documentElement.style.setProperty("--sos-accent", moduleAccent[mod] ?? "#1a73e8");
   }
 
   let settingsOpen = false;
@@ -285,6 +290,8 @@
     <main class="flex-1 min-w-0 flex flex-col overflow-hidden">
       {#if mod === "home"}
         <Home />
+      {:else if mod === "chat"}
+        <Chat />
       {:else if mod === "writer"}
         {#if showsWriter}
           <Writer />

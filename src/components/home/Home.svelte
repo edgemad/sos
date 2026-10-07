@@ -153,6 +153,15 @@
       {/each}
       <button
         class="card glass p-4 w-[190px] shrink-0 text-left hover:shadow-modal transition-transform hover:-translate-y-0.5"
+        title="Talk to Talia"
+        on:click={() => activeModule.set("chat")}
+      >
+        <div class="w-10 h-10 rounded-full grid place-items-center text-xl mb-3" style="background:#e91e8c22">💬</div>
+        <p class="font-medium text-sm">Ask Talia</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-snug">Chat, paste screenshots, attach files — she's on duty</p>
+      </button>
+      <button
+        class="card glass p-4 w-[190px] shrink-0 text-left hover:shadow-modal transition-transform hover:-translate-y-0.5"
         title="Open Talia Arcade"
         on:click={() => activeModule.set("arcade")}
       >

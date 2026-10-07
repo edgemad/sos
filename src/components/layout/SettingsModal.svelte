@@ -2,6 +2,8 @@
   // Settings modal — opened from the native menu or the header gear.
   import { get } from "svelte/store";
   import { settings, resetSettings } from "../../lib/settings";
+  import { THEME_PRESETS } from "../../lib/themes";
+  import { toast } from "../../lib/uiBridge";
   import { speechVoices, isSpeechSynthesisSupported, speakTalia, stopSpeaking } from "../../lib/voice";
   import { state, darkMode } from "../../lib/state";
   import { saveFileDialog } from "../../lib/tauri";
@@ -22,7 +24,8 @@
   });
   function testVoice(): void {
     stopSpeaking();
-    speakTalia("Hi hi! It's Talia! This is how I'll sound when I help you.", get(settings));
+    const spoken = speakTalia("Hi hi! It's Talia! This is how I'll sound when I help you.", get(settings));
+    if (!spoken) toast("Voice is turned off — enable voice features first.");
   }
 
   const fonts = [
@@ -41,6 +44,27 @@
   const inputText = (e: Event): string => (e.currentTarget as HTMLInputElement).value;
   const selectValue = (e: Event): string => (e.currentTarget as HTMLSelectElement).value;
   const checkboxValue = (e: Event): boolean => (e.currentTarget as HTMLInputElement).checked;
+
+  // ── Talia AI connection test ─────────────────────────────────────
+  let testingAi = false;
+  async function testAiConnection(): Promise<void> {
+    const s = get(settings);
+    if (!s.taliaEndpoint.trim() || !s.taliaModel.trim()) {
+      toast("Fill in both the server URL and the model name first.");
+      return;
+    }
+    testingAi = true;
+    try {
+      const { askTalia } = await import("../../lib/talia");
+      const answer = await askTalia({ input: "ping", history: [], attachments: [], endpoint: s.taliaEndpoint, model: s.taliaModel });
+      if (answer.source === "ollama") toast(`✅ ${s.taliaModel} is alive and talking!`);
+      else toast(`❌ Couldn't reach the model (${answer.fallbackReason ?? "unknown error"}).`);
+    } catch {
+      toast("❌ Couldn't reach the model — check the URL and that the server is running.");
+    } finally {
+      testingAi = false;
+    }
+  }
 </script>
 
 <div class="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm grid place-items-center" on:click|self={() => dispatch("close")}>
@@ -61,6 +85,19 @@
           <button class="btn btn-ghost text-xs border border-gray-300 {$darkMode ? '!bg-docs/10 !border-docs !text-docs' : ''}" on:click={() => darkMode.set(true)}>Dark</button>
         </div>
         </div>
+        <label class="flex flex-col gap-1 text-sm mt-3">
+          <span class="text-gray-500 text-xs">Color world — pick your vibe</span>
+          <div class="flex flex-wrap gap-1.5">
+            {#each THEME_PRESETS as t (t.id)}
+              <button
+                class="chip cursor-pointer border text-xs px-2.5 py-1 rounded-full
+                  {$settings.themePreset === t.id ? 'border-transparent text-white' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+                style={$settings.themePreset === t.id ? `background:${t.accent}` : `border-color:${t.accent}66`}
+                on:click={() => settings.update((s) => ({ ...s, themePreset: t.id }))}
+              >{t.emoji} {t.label}</button>
+            {/each}
+          </div>
+        </label>
       </section>
 
       <!-- Editor fonts -->
@@ -80,6 +117,28 @@
             <input type="range" min="11" max="22" value={$settings.editorFontSize} on:input={(e) => settings.update((s) => ({ ...s, editorFontSize: parseInt(inputText(e), 10) }))} />
           </label>
         </div>
+      </section>
+
+      <!-- Talia AI -->
+      <section>
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Talia AI</h3>
+        <p class="text-xs text-gray-400 mb-2">Optional: point Talia at a self-hosted model (any Ollama-compatible server). Everything stays on your machine or your own server.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="text-gray-500 text-xs">Server URL</span>
+            <input class="input" placeholder="http://localhost:11434" value={$settings.taliaEndpoint} on:change={(e) => settings.update((s) => ({ ...s, taliaEndpoint: inputText(e).trim() }))} />
+          </label>
+          <label class="flex flex-col gap-1 text-sm">
+            <span class="text-gray-500 text-xs">Model</span>
+            <input class="input" placeholder="llama3.2" value={$settings.taliaModel} on:change={(e) => settings.update((s) => ({ ...s, taliaModel: inputText(e).trim() }))} />
+          </label>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">{$settings.taliaEndpoint && $settings.taliaModel ? `🧠 Self-hosted brain: ${$settings.taliaModel}` : "🧠 Using Talia's built-in offline brain (no setup needed)."}</p>
+        <button
+          class="btn btn-ghost border border-gray-300 dark:border-gray-600 text-xs mt-2"
+          disabled={testingAi}
+          on:click={() => void testAiConnection()}
+        >{testingAi ? "Testing…" : "🔌 Test connection"}</button>
       </section>
 
       <!-- Voice -->

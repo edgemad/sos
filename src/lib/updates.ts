@@ -42,7 +42,7 @@ export function isNewerVersion(current: string, latest: string): boolean {
 
 // ── Platform/asset matching (pure, unit-tested) ───────────────────────
 
-export type SosPlatform = "darwin" | "win32" | "linux";
+export type SosPlatform = "darwin" | "win32" | "linux" | "android";
 export type SosArch = "aarch64" | "x86_64";
 
 export interface ReleaseAsset {
@@ -53,7 +53,8 @@ export interface ReleaseAsset {
 /** Pick the release asset that installs on the running platform.
  *  macOS: prefers the aarch64 dmg (WKWebView's UA cannot distinguish the
  *  arch, so this is the pragmatic default on modern Macs). Windows: the
- *  NSIS setup exe, falling back to the msi. Linux: AppImage, then deb. */
+ *  NSIS setup exe, falling back to the msi. Linux: AppImage, then deb.
+ *  Android: the release APK. */
 export function pickAssetForPlatform(
   assets: readonly ReleaseAsset[],
   platform: SosPlatform,
@@ -67,6 +68,8 @@ export function pickAssetForPlatform(
     return null;
   };
   switch (platform) {
+    case "android":
+      return first(/\.apk$/i);
     case "darwin":
       return arch === "aarch64"
         ? first(/aarch64.*\.dmg$/i, /arm64.*\.dmg$/i, /x64.*\.dmg$/i)
@@ -78,8 +81,10 @@ export function pickAssetForPlatform(
   }
 }
 
-/** Coarse platform detection inside the webview. */
+/** Coarse platform detection inside the webview. Android is checked before
+ *  the Linux fallback — Android webviews UA-string as Linux otherwise. */
 export function detectPlatform(ua: string = navigator.userAgent): SosPlatform {
+  if (/Android/i.test(ua)) return "android";
   if (/Mac|iPhone|iPad/i.test(ua)) return "darwin";
   if (/Win/i.test(ua)) return "win32";
   return "linux";

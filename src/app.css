@@ -158,13 +158,13 @@
 .sos-ambient::after {
   width: 38vmax; height: 38vmax;
   right: -10vmax; top: 22vh;
-  background: color-mix(in srgb, #34a853 26%, transparent);
+  background: color-mix(in srgb, var(--sos-blob-b, #34a853) 26%, transparent);
   animation: sos-drift-b 58s ease-in-out infinite alternate;
 }
 .sos-ambient .sos-ambient-blob {
   width: 40vmax; height: 40vmax;
   left: 24vw; bottom: -18vmax;
-  background: color-mix(in srgb, #a142f4 20%, transparent);
+  background: color-mix(in srgb, var(--sos-blob-c, #a142f4) 20%, transparent);
   animation: sos-drift-c 70s ease-in-out infinite alternate;
 }
 .dark .sos-ambient::before,

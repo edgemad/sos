@@ -11,7 +11,8 @@ const ASSETS = [
   { name: "Simple.Office.Suite_1.4.1_x64_en-US.msi", url: "https://example.com/x64.msi" },
   { name: "Simple.Office.Suite_1.4.1_amd64.AppImage", url: "https://example.com/AppImage" },
   { name: "Simple.Office.Suite_1.4.1_amd64.deb", url: "https://example.com/deb" },
-  { name: "Simple.Office.Suite_1.4.1-1.x86_64.rpm", url: "https://example.com/rpm" }
+  { name: "Simple.Office.Suite_1.4.1-1.x86_64.rpm", url: "https://example.com/rpm" },
+  { name: "Simple.Office.Suite_1.4.1_aarch64.apk", url: "https://example.com/app.apk" }
 ];
 
 describe("isNewerVersion", () => {
@@ -59,6 +60,11 @@ describe("pickAssetForPlatform", () => {
     expect(pickAssetForPlatform(debOnly, "linux", "x86_64")).toBe("https://example.com/deb");
   });
 
+  it("picks the release APK on Android", () => {
+    expect(pickAssetForPlatform(ASSETS, "android", "aarch64")).toBe("https://example.com/app.apk");
+    expect(pickAssetForPlatform(ASSETS.filter((a) => !a.name.endsWith(".apk")), "android", "aarch64")).toBeNull();
+  });
+
   it("returns null when nothing usable exists", () => {
     expect(pickAssetForPlatform([], "linux", "x86_64")).toBeNull();
   });
@@ -69,6 +75,11 @@ describe("platform detection", () => {
     expect(detectPlatform("Mozilla/5.0 (Macintosh) AppleWebKit")).toBe("darwin");
     expect(detectPlatform("Mozilla/5.0 (Windows NT 10.0)")).toBe("win32");
     expect(detectPlatform("Mozilla/5.0 (X11; Linux)")).toBe("linux");
+  });
+
+  it("detects Android before the Linux fallback (Android UAs claim X11; Linux)", () => {
+    const ua = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
+    expect(detectPlatform(ua)).toBe("android");
   });
 
   it("defaults Apple Silicon heuristics safely", () => {

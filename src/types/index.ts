@@ -2,6 +2,7 @@
 
 export type ModuleId =
   | "home"
+  | "chat"
   | "writer"
   | "sheets"
   | "slides"

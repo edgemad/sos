@@ -30,6 +30,7 @@
     const cmds: Cmd[] = [];
     const nav: { m: ModuleId; label: string; icon: string }[] = [
       { m: "home", label: "Go to Home", icon: "🏠" },
+      { m: "chat", label: "Talk to Talia", icon: "💬" },
       { m: "writer", label: "Go to Docs", icon: "📄" },
       { m: "sheets", label: "Go to Sheets", icon: "📊" },
       { m: "slides", label: "Go to Slides", icon: "🖼️" },

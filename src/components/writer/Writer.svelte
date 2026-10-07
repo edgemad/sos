@@ -157,10 +157,16 @@
   let voiceTyping: VoiceTypingHandle | null = null;
   // While Talia speaks an ack, the live mic would transcribe her own voice
   // into the document — ignore finals until shortly after she goes quiet.
+  // The window opens on a conservative minimum and extends when the ack's
+  // last utterance actually ends, so slow reading rates stay protected too.
+  // When nothing was actually spoken (voice off/unavailable) there is no
+  // echo to fear and the mic stays open.
   let muteUntil = 0;
   function spokenAck(kind: "ack" | "stop"): void {
-    speakTalia(ackPhrase(kind), $appSettings);
-    muteUntil = performance.now() + 2200;
+    const spoken = speakTalia(ackPhrase(kind), $appSettings, () => {
+      muteUntil = Math.max(muteUntil, performance.now() + 800);
+    });
+    if (spoken) muteUntil = performance.now() + 2200;
   }
 
   function toggleVoice(): void {

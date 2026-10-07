@@ -373,6 +373,9 @@ const DICTATION_COMMANDS: Record<string, string> = {
 const DICTATION_APPS: Record<string, string> = {
   "go home": "home",
   "open home": "home",
+  "open chat": "chat",
+  "talk to talia": "chat",
+  "ask talia": "chat",
   "open docs": "writer",
   "open documents": "writer",
   "open sheets": "sheets",
@@ -446,13 +449,15 @@ export function speak(text: string, opts: SpeakOptions = {}): boolean {
     u.rate = clampRate(opts.rate ?? 1);
     u.pitch = clampPitch(opts.pitch ?? 1);
     u.onboundary = () => speakPulse.update((n) => n + 1); // orb word pulse
+    // Any chunk error clears the speaking flag — a mid-queue failure must
+    // never leave the orb (or the dictation mute window) stuck.
+    u.onerror = () => isSpeaking.set(false);
     if (i === chunks.length - 1) {
       const done = opts.onEnd;
       u.onend = () => {
         isSpeaking.set(false);
         done?.();
       };
-      u.onerror = () => isSpeaking.set(false);
     }
     return u;
   });
